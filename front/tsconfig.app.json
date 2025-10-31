@@ -1,0 +1,8 @@
+// FILE: tsconfig.app.json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "module": "ESNext"
+  }
+}

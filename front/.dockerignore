@@ -1,0 +1,14 @@
+# ไฟล์.dockerignore
+# ❌ ไม่ ignore .env เพราะต้องใช้มันใน production
+# .env
+
+# Nuxt build
+node_modules/
+.nuxt/
+*.log
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

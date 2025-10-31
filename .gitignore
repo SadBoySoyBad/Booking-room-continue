@@ -1,0 +1,19 @@
+# Sensitive and environment files
+.env
+certbot/conf/
+certbot/www/
+
+# Node modules and build outputs
+back/node_modules/
+front/node_modules/
+front/.nuxt/
+front/.output/
+front/.nitro/
+
+# Logs and misc
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+
