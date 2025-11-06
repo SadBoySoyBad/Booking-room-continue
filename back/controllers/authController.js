@@ -23,9 +23,7 @@ const authController = {
         httpOnly: true,
         secure: true,
         sameSite: 'none',
-        domain: process.env.NODE_ENV === 'production'
-          ? 'bookingmeetingroom.th.app.ruk-com.cloud'
-          : undefined,
+        domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
         path: '/',
         maxAge: 24 * 60 * 60 * 1000
       });
@@ -113,9 +111,7 @@ const authController = {
         httpOnly: true,
         secure: true,
         sameSite: 'none',
-        domain: process.env.NODE_ENV === 'production'
-          ? 'bookingmeetingroom.th.app.ruk-com.cloud'
-          : undefined,
+        domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
         path: '/'
       });
 
