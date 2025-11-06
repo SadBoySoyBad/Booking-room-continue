@@ -10,31 +10,28 @@ const { authMiddleware } = require('../middleware/authMiddleware');
 // ✅ Google OAuth login route
 router.get('/google', (req, res, next) => {
     const state = crypto.randomBytes(32).toString('hex');
-    req.session.state = state;
+    // cookie-session does not implement req.session.save; just assign
+    if (req.session) {
+        req.session.state = state;
+        req.session.returnTo = process.env.FRONTEND_URL + '/booking';
+    }
 
-    const returnTo = process.env.FRONTEND_URL + '/booking';
-    req.session.returnTo = returnTo;
-
-    req.session.save(err => {
-        if (err) return next(err);
-
-        passport.authenticate('google', {
-            scope: [
-                'openid',
-                'https://www.googleapis.com/auth/userinfo.email',
-                'https://www.googleapis.com/auth/userinfo.profile'
-            ],
-            accessType: 'offline',
-            prompt: 'consent',
-            includeGrantedScopes: true,
-            state: state
-        })(req, res, next);
-    });
+    passport.authenticate('google', {
+        scope: [
+            'openid',
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile'
+        ],
+        accessType: 'offline',
+        prompt: 'consent',
+        includeGrantedScopes: true,
+        state: state
+    })(req, res, next);
 });
 
 // ✅ Google OAuth callback
 router.get('/google/callback', (req, res, next) => {
-    if (req.query.state !== req.session.state) {
+    if (!req.session || req.query.state !== req.session.state) {
         return res.status(400).send('Invalid state parameter. Possible CSRF attack.');
     }
 
