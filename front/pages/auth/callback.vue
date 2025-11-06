@@ -12,7 +12,9 @@ onMounted(async () => {
   if (import.meta.client) {
     // ไม่ต้องใช้ token จาก query แล้ว
     try {
-      const res = await fetch('https://bookingmeetingroom.th.app.ruk-com.cloud/api/auth/verify', {
+      const config = useRuntimeConfig()
+      const apiBase = config.public.apiBaseURL
+      const res = await fetch(`${apiBase}/auth/verify`, {
         credentials: 'include',
       })
 

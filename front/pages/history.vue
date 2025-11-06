@@ -90,7 +90,7 @@ async function fetchUserFromToken() {
   }
 
   try {
-    const response = await fetch('/api/auth/verify', { // Endpoint สำหรับตรวจสอบ token
+    const response = await const config = useRuntimeConfig()\n    fetch(${config.public.apiBaseURL}/auth/verify', { // Endpoint สำหรับตรวจสอบ token
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}` // ส่ง token ไปกับ request
