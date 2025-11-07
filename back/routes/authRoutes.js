@@ -25,7 +25,8 @@ router.get('/google', (req, res, next) => {
         accessType: 'offline',
         prompt: 'consent',
         includeGrantedScopes: true,
-        state: state
+        state: state,
+        session: false
     })(req, res, next);
 });
 
@@ -37,7 +38,7 @@ router.get('/google/callback', (req, res, next) => {
 
     passport.authenticate('google', {
         failureRedirect: `${process.env.FRONTEND_URL}/login?error=google_login_failed`,
-        session: true
+        session: false
     })(req, res, (err) => {
         if (err) {
             return res.redirect(`${process.env.FRONTEND_URL}/login?error=${err.message}`);
