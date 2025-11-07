@@ -104,19 +104,23 @@ const authController = {
   },
 
   logout: (req, res) => {
-    req.logout?.(err => {
-      if (err) return res.status(500).json({ message: 'Logout failed' });
+    try {
+      if (typeof req.logout === 'function') {
+        // Avoid passport session save calls on serverless
+        try { req.logout(); } catch (_) {}
+      }
+    } catch (_) {}
 
-      res.clearCookie('auth_token', {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
-        path: '/'
-      });
-
-      res.redirect(`${process.env.FRONTEND_URL}/login`);
+    res.clearCookie('auth_token', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
+      path: '/'
     });
+
+    // return 200 JSON for SPA to handle
+    return res.status(200).json({ message: 'Logged out' });
   }
 };
 

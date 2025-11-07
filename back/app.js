@@ -64,7 +64,8 @@ app.use(
 );
 
 app.use(passport.initialize());
-app.use(passport.session());
+// On serverless + cookie-session, we don't use Passport's session store
+// app.use(passport.session());
 
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'Welcome to BookingRuk Backend API!' });
