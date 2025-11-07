@@ -64,24 +64,9 @@ router.get('/verify', authMiddleware, (req, res) => {
 router.get('/logout', authController.logout);
 
 // ✅ NEW: MyInfo route (ตรวจสอบสถานะ login จากทั้ง cookie + JWT)
-router.get('/myinfo', (req, res) => {
-    const authHeader = req.headers.authorization;
-
-    if (req.user) {
-        return res.status(200).json({ user: req.user });
-    }
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        try {
-            const token = authHeader.split(' ')[1];
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            return res.status(200).json({ user: decoded });
-        } catch (err) {
-            return res.status(403).json({ message: 'Invalid or expired token' });
-        }
-    }
-
-    return res.status(401).json({ message: 'Not logged in' });
+// Use authMiddleware so cookie JWT (auth_token) is accepted
+router.get('/myinfo', authMiddleware, (req, res) => {
+    return res.status(200).json({ user: req.user });
 });
 
 module.exports = router;
