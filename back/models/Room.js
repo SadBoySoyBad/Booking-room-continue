@@ -31,8 +31,7 @@ const Room = {
         const [rooms] = await db.query('SELECT id, name, status FROM rooms');
 
         const roomsWithDetails = await Promise.all(rooms.map(async (room) => {
-            const now = new Date();
-            const nowString = now.toISOString().slice(0, 19).replace('T', ' '); // Current datetime string
+             // Current datetime string
 
             let currentBooking = null; // เริ่มต้นให้เป็น null
             let displayStatus = room.status; // ใช้ status เริ่มต้นจาก DB
@@ -46,8 +45,8 @@ const Room = {
                      FROM bookings b
                      WHERE b.room_id = ?
                      AND b.status IN ('PENDING', 'APPROVED')
-                     AND ? < b.end_time AND ? > b.start_time`, // การจองที่ทับซ้อนกับเวลาปัจจุบัน
-                    [room.id, nowString, nowString]
+                     AND NOW() < b.end_time AND NOW() > b.start_time`, // การจองที่ทับซ้อนกับเวลาปัจจุบัน
+                    [room.id]
                 );
 
                 if (liveBookings.length > 0) {
