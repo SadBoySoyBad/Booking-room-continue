@@ -54,7 +54,12 @@ const Room = {
                     displayStatus = 'OCCUPIED';
                 } else {
                     // ถ้าไม่มีการจองที่กำลังดำเนินอยู่ ให้ตรวจสอบว่ามีจองในวันนี้แล้วหรือยัง
-                    const [dateBookings] = await db.query(SELECT 1 FROM bookings\n                         WHERE room_id = ? AND DATE(start_time) = ?\n                         AND COALESCE(status,'PENDING') IN ('PENDING','APPROVED') LIMIT 1,\n                        [room.id, forDate]\n                    );\n                    displayStatus = dateBookings.length > 0 ? 'OCCUPIED' : 'AVAILABLE'; // ถ้าเต็มวันก็ให้เป็น OCCUPIED
+                    const [dateBookings] = await db.query(
+    SELECT id FROM bookings
+    WHERE room_id = ? AND DATE(start_time) = ?
+      AND COALESCE(status,'PENDING') IN ('PENDING','APPROVED')
+    LIMIT 1
+, [room.id, forDate]);\n                    displayStatus = dateBookings.length > 0 ? 'OCCUPIED' : 'AVAILABLE'; // ถ้าเต็มวันก็ให้เป็น OCCUPIED
                 }
             }
 
