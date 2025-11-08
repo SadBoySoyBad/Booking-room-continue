@@ -90,15 +90,16 @@
 /* eslint-disable no-unused-vars */
 
 import { ref, onMounted, computed } from 'vue'
+import { useAuth } from '~/composables/useAuth'
 import { useRouter } from 'vue-router'
 import { useApi } from '~/composables/useApi'
 
 const router = useRouter()
 const api = useApi()
 
-// Authentication State
-const isLoggedIn = ref(false)
-const currentUser = ref(null)
+// Authentication State (use shared store)
+const { user: currentUserState, isLoggedIn, fetchUser } = useAuth()
+const currentUser = computed(() => currentUserState.value)
 
 // Room Status
 const rooms = ref([])
@@ -246,29 +247,10 @@ const fetchMeetingsForSelectedDate = async () => {
 };
 
 const verifyUserLoggedIn = async () => {
-  const token = localStorage.getItem('user_token');
-  if (token) {
-    try {
-      const response = await api.get('/auth/verify');
-      if (response && response.user) {
-        isLoggedIn.value = true;
-        currentUser.value = response.user;
-        await fetchMeetingsForSelectedDate();
-      } else {
-        localStorage.removeItem('user_token');
-        isLoggedIn.value = false;
-        currentUser.value = null;
-      }
-    } catch (error) {
-      console.error('Error verifying user token:', error);
-      localStorage.removeItem('user_token');
-      isLoggedIn.value = false;
-      currentUser.value = null;
-      router.push('/login');
-    }
-  } else {
-    isLoggedIn.value = false;
-    currentUser.value = null;
+  // Rely on shared fetchUser() which checks both cookie (Google OAuth) and localStorage token (guest)
+  await fetchUser()
+  if (isLoggedIn.value) {
+    await fetchMeetingsForSelectedDate()
   }
 };
 

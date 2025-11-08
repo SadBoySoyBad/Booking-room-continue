@@ -40,8 +40,7 @@
 
         <template v-if="isLoggedIn">
           <button
-            class="transition text-red-600 whitespace-nowrap min-w-0 hover:shadow active:scale-95 active:shadow-lg transition-all duration-150 hover:shadow transition cursor-pointer"
-            
+            class="px-3 py-1 rounded-full bg-red-600 text-white font-bold whitespace-nowrap min-w-0 hover:bg-red-700 active:bg-red-800 active:scale-95 transition-all duration-150"
             @click="logout"
           >
             Logout

@@ -57,17 +57,18 @@
 
         <!-- Terms -->
         <div class="text-xs text-gray-600 flex items-start gap-2">
-          <input type="checkbox" required class="mt-1.5 accent-blue-600" >
+          <input type="checkbox" v-model="accepted" required class="mt-1.5 accent-blue-600" >
           <span>
             By continuing, you agree to <strong class="text-blue-800">Arrangemeet’s</strong>
-            <a href="#" class="underline text-blue-800">Terms of Service</a> and
-            <a href="#" class="underline text-blue-800">Privacy Policy</a>
+            <a href="/terms" class="underline text-blue-800">Terms of Service</a> and
+            <a href="/privacy" class="underline text-blue-800">Privacy Policy</a>
           </span>
         </div>
 
         <button 
           type="submit"
-          class="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all font-semibold">
+          :disabled="!accepted"
+          class="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
           Sign In
         </button>
       </form>
@@ -83,6 +84,7 @@ import { useAuth } from '~/composables/useAuth'
 
 const config = useRuntimeConfig()
 const guest = ref({ name: '', phone: '', company: '' })
+const accepted = ref(false)
 const api = useApi()
 const router = useRouter()
 const { fetchUser } = useAuth()
