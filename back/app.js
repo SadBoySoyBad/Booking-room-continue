@@ -21,12 +21,16 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-// Flexible CORS via env (FRONTEND_URL, CORS_ALLOWED_ORIGINS=CSV)
+// Flexible CORS via env (FRONTEND_URL, BACKEND_URL, CORS_ALLOWED_ORIGINS=CSV)
 app.use(
   cors({
     origin: (origin, callback) => {
+      // Allow non-browser requests (no Origin) e.g., curl, server-to-server
+      if (!origin) return callback(null, true);
+
       const allowed = new Set();
       if (process.env.FRONTEND_URL) allowed.add(process.env.FRONTEND_URL);
+      if (process.env.BACKEND_URL) allowed.add(process.env.BACKEND_URL);
       if (process.env.CORS_ALLOWED_ORIGINS) {
         process.env.CORS_ALLOWED_ORIGINS.split(',')
           .map((s) => s.trim())
@@ -37,11 +41,20 @@ app.use(
         allowed.add('http://localhost:3000');
         allowed.add('http://127.0.0.1:3000');
       }
-      if (!origin || allowed.has(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+
+      try {
+        const url = new URL(origin);
+        const hostname = url.hostname;
+        const isVercelPreview = hostname.endsWith('.vercel.app');
+        if (allowed.has(origin) || isVercelPreview) {
+          return callback(null, true);
+        }
+      } catch (_) {
+        // If URL parsing fails, fall back to strict allow-list only
+        if (allowed.has(origin)) return callback(null, true);
       }
+
+      return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
   })
