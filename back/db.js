@@ -13,7 +13,8 @@ const dbConfig = {
     ssl: process.env.DB_SSL === 'true' ? {} : undefined,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS) || 10000
 };
 
 try {
