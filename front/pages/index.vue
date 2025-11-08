@@ -143,9 +143,16 @@ const calendarDays = computed(() => {
   return result
 })
 
+function formatLocalDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function isToday(dateStr) {
-  const todayIsoStr = today.toISOString().split('T')[0];
-  return todayIsoStr === dateStr;
+  // Use local date (not UTC) so the gray circle marks the real local day
+  return formatLocalDate(new Date()) === dateStr;
 }
 
 // Meeting Details (ดึงข้อมูลจริงจาก Backend)
@@ -169,7 +176,7 @@ function prevMonth() {
   } else {
     currentMonth.value--;
   }
-  selectDay(new Date(currentYear.value, currentMonth.value, 1).toISOString().split('T')[0]);
+  selectDay(formatLocalDate(new Date(currentYear.value, currentMonth.value, 1)));
 }
 
 function nextMonth() {
@@ -179,7 +186,7 @@ function nextMonth() {
   } else {
     currentMonth.value++;
   }
-  selectDay(new Date(currentYear.value, currentMonth.value, 1).toISOString().split('T')[0]);
+  selectDay(formatLocalDate(new Date(currentYear.value, currentMonth.value, 1)));
 }
 
 // Helper เพื่อกำหนด class ตามสถานะห้อง
