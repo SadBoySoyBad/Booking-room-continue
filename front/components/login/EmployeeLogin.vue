@@ -73,7 +73,8 @@ const loginWithMicrosoft = async () => {
     })
 
     if (response.user) {
-      sessionStorage.setItem('token', response.token)
+      // Store in localStorage to align with auth/myinfo checks
+      localStorage.setItem('token', response.token)
       router.push('/')
     }
   } catch (err) {
