@@ -134,7 +134,16 @@ const showLetterBox = ref(false)
 const today = new Date()
 const year = ref(today.getFullYear())
 const month = ref(today.getMonth())
-const selectedDate = ref(today.toISOString().split('T')[0])
+
+// Use local date (not UTC) so the highlighted "today" matches the user's timezone
+function formatLocalDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const selectedDate = ref(formatLocalDate(today))
 const currentUser = ref({ id: null, username: '', email: '', role: '', phone: '', company: '' })
 
 const allRooms = ref([]) //store room list for lookup
@@ -204,7 +213,7 @@ function prevMonth() {
   } else {
     month.value--
   }
-  selectedDate.value = new Date(year.value, month.value, 1).toISOString().split('T')[0]
+  selectedDate.value = formatLocalDate(new Date(year.value, month.value, 1))
 }
 
 function nextMonth() {
@@ -214,12 +223,12 @@ function nextMonth() {
   } else {
     month.value++
   }
-  selectedDate.value = new Date(year.value, month.value, 1).toISOString().split('T')[0]
+  selectedDate.value = formatLocalDate(new Date(year.value, month.value, 1))
 }
 
 function isToday(dateStr) {
-  const todayStr = today.toISOString().split('T')[0]
-  return todayStr === dateStr
+  // Compare with current local date string (avoids UTC offset issues)
+  return formatLocalDate(new Date()) === dateStr
 }
 
 function getMeetingStyle(start_time, end_time) {
