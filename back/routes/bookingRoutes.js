@@ -8,7 +8,8 @@ router.post('/', authMiddleware, bookingController.createBooking);
 
 router.get('/', authMiddleware, authorizeRoles(['admin']), bookingController.getAll);
 
-router.get('/daily/:date', authMiddleware, authorizeRoles(['employee', 'admin']), bookingController.getByDate);
+// Allow all logged-in roles (guest/employee/admin) to view daily bookings; controller hides others' details
+router.get('/daily/:date', authMiddleware, bookingController.getByDate);
 
 router.get('/my-history', authMiddleware, bookingController.getByUserId);
 
