@@ -85,14 +85,22 @@ app.get('/', (req, res) => {
 });
 
 // Routes
+// Mount with and without /api prefix to be resilient to platform path rewriting
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/users', userRoutes);
+app.use('/auth', authRoutes);
+app.use('/rooms', roomRoutes);
+app.use('/bookings', bookingRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
 // Health
 app.get('/api/healthz', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+app.get('/healthz', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
