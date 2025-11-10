@@ -111,13 +111,35 @@ const authController = {
       }
     } catch (_) {}
 
-    res.clearCookie('auth_token', {
+    // Clear JWT cookie robustly (cover host-only and domain cookies)
+    const cookieBase = {
       httpOnly: true,
       secure: true,
       sameSite: 'none',
-      domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
-      path: '/'
-    });
+      path: '/',
+    };
+    try {
+      res.clearCookie('auth_token', {
+        ...cookieBase,
+        domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
+      });
+      // Also set explicit expired cookie to cover some browsers
+      res.cookie('auth_token', '', {
+        ...cookieBase,
+        domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
+        maxAge: 0,
+        expires: new Date(0),
+      });
+      // In case cookie was set as host-only, clear again without domain option
+      res.clearCookie('auth_token', { ...cookieBase });
+      res.cookie('auth_token', '', { ...cookieBase, maxAge: 0, expires: new Date(0) });
+    } catch (_) {}
+
+    // Clear session cookie used only for OAuth state (not for auth)
+    try {
+      res.clearCookie('session', { ...cookieBase });
+      res.cookie('session', '', { ...cookieBase, maxAge: 0, expires: new Date(0) });
+    } catch (_) {}
 
     // return 200 JSON for SPA to handle
     return res.status(200).json({ message: 'Logged out' });
