@@ -69,6 +69,7 @@ import LetterBoxPopup from '~/components/LetterBoxPopup.vue'
 const { user, isLoggedIn, fetchUser, logout: baseLogout } = useAuth()
 const logout = async () => {
   await baseLogout()
+  await fetchUser()
   router.push('/')  // redirect ไปหน้าแรกหลัง logout
 }
 

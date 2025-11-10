@@ -2,6 +2,7 @@
 <script setup>
 // import { useRouter, useRoute } from 'vue-router'
 import { onMounted } from 'vue'
+import { useAuth } from '~/composables/useAuth'
 // import { useRouter } from 'vue-router'
 import { useRouter } from 'vue-router'
 
@@ -10,6 +11,7 @@ const router = useRouter()
 
 onMounted(async () => {
   if (import.meta.client) {
+    const { fetchUser } = useAuth()
     // ไม่ต้องใช้ token จาก query แล้ว
     try {
       const config = useRuntimeConfig()
@@ -21,6 +23,8 @@ onMounted(async () => {
       if (res.ok) {
         const data = await res.json()
         console.log('User:', data.user)
+        // Sync global auth store so navbar updates immediately
+        await fetchUser()
         // แนะนำ: เก็บ data.user ใน store เช่น pinia หรือ sessionStorage ถ้าต้องการ
         // 🔥🔥🔥 เพิ่มตรงนี้เพื่อล้าง sessionStorage ที่อาจทำให้ redirect ผิด
         sessionStorage.removeItem('loginRedirectPath')
