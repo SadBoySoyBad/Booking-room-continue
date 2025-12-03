@@ -19,6 +19,9 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 
 const app = express();
 
+// Disable ETag to avoid 304 caching issues for auth endpoints
+app.set('etag', false);
+
 app.set('trust proxy', 1);
 
 // Flexible CORS via env (FRONTEND_URL, BACKEND_URL, CORS_ALLOWED_ORIGINS=CSV)

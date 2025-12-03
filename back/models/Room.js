@@ -1,148 +1,101 @@
-const db = require('../db');
+// back/models/Room.js (MongoDB + Mongoose)
+const mongoose = require('../db');
+
+const RoomSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, unique: true },
+    status: { type: String, enum: ['AVAILABLE', 'OCCUPIED', 'MAINTENANCE'], default: 'AVAILABLE' },
+  },
+  { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
+);
+
+RoomSchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: (_, ret) => {
+    ret.id = ret._id.toString();
+    delete ret._id;
+    return ret;
+  },
+});
+
+const RoomModel = mongoose.model('Room', RoomSchema);
+const getBookingModel = () => {
+  if (mongoose.models.Booking) return mongoose.models.Booking;
+  // Ensure schema is registered (Booking.js registers on require)
+  require('./Booking');
+  return mongoose.models.Booking;
+};
 
 const Room = {
-    // getAllWithCalculatedStatus: async (forDate = new Date().toISOString().split('T')[0]) => {
-    //     const [rooms] = await db.query('SELECT id, name, status FROM rooms');
-    //     const roomsWithStatus = await Promise.all(rooms.map(async (room) => {
-    //         if (room.status === 'MAINTENANCE') {
-    //             return { ...room, display_status: 'MAINTENANCE' };
-    //         }
-    //         const [bookings] = await db.query(
-    //             `SELECT start_time, end_time, status FROM bookings
-    //              WHERE room_id = ? AND DATE(start_time) = ?
-    //              AND status IN ('PENDING', 'APPROVED')`,
-    //             [room.id, forDate]
-    //         );
-    //         const isFullyBooked = Room._checkIfFullyBooked(bookings);
-    //         return {
-    //             ...room,
-    //             display_status: isFullyBooked ? 'OCCUPIED' : 'AVAILABLE'
-    //         };
-    //     }));
-    //     return roomsWithStatus;
-    // },
+  getAllWithCalculatedStatus: async (forDate = new Date().toISOString().split('T')[0]) => {
+    const rooms = await RoomModel.find().lean({ virtuals: true });
+    const dayStart = new Date(`${forDate}T00:00:00.000Z`);
+    const dayEnd = new Date(`${forDate}T23:59:59.999Z`);
+    const now = new Date();
 
-    getAllWithCalculatedStatus: async (forDate = new Date().toISOString().split('T')[0]) => {
-        const [rooms] = await db.query('SELECT id, name, status FROM rooms');
+    const results = await Promise.all(
+      rooms.map(async (room) => {
+        let displayStatus = room.status;
+        let currentBooking = null;
 
-        const roomsWithDetails = await Promise.all(
-            rooms.map(async (room) => {
-                let currentBooking = null;
-                let displayStatus = room.status;
+        if (room.status === 'MAINTENANCE') {
+          displayStatus = 'MAINTENANCE';
+        } else {
+          // live booking overlapping now
+          const BookingModel = getBookingModel();
+          const live = await BookingModel.findOne({
+            room_id: room.id,
+            status: { $in: ['PENDING', 'APPROVED'] },
+            start_time: { $lt: now },
+            end_time: { $gt: now },
+          })
+            .select('id topic start_time end_time guest_name guest_company status')
+            .lean({ virtuals: true });
 
-                if (room.status === 'MAINTENANCE') {
-                    displayStatus = 'MAINTENANCE';
-                } else {
-                    // Live booking overlapping now
-                    const [liveBookings] = await db.query(
-                        `SELECT b.id, b.topic, b.start_time, b.end_time, b.guest_name, b.guest_company, b.status
-                         FROM bookings b
-                         WHERE b.room_id = ?
-                         AND b.status IN ('PENDING', 'APPROVED')
-                         AND NOW() < b.end_time AND NOW() > b.start_time`,
-                        [room.id]
-                    );
-
-                    if (liveBookings.length > 0) {
-                        currentBooking = liveBookings[0];
-                        displayStatus = 'OCCUPIED';
-                    } else {
-                        // Any booking today?
-                        const [dateBookings] = await db.query(
-                            `SELECT id FROM bookings
-                             WHERE room_id = ? AND DATE(start_time) = ?
-                             AND COALESCE(status, 'PENDING') IN ('PENDING', 'APPROVED')
-                             LIMIT 1`,
-                            [room.id, forDate]
-                        );
-                        displayStatus =
-                            dateBookings.length > 0 ? 'OCCUPIED' : 'AVAILABLE';
-                    }
-                }
-
-                return {
-                    ...room,
-                    display_status: displayStatus,
-                    current_booking: currentBooking,
-                };
-            })
-        );
-
-        return roomsWithDetails;
-    },
-
-    _checkIfFullyBooked: (bookings) => {
-        const dayStart = 8 * 60; // 8:00 AM
-        const dayEnd = 18 * 60; // 6:00 PM
-        const totalBookingMinutes = dayEnd - dayStart;
-
-        let bookedIntervals = [];
-
-        bookings.forEach((booking) => {
-            const start = new Date(booking.start_time);
-            const end = new Date(booking.end_time);
-
-            let bookingStartMinutes = start.getHours() * 60 + start.getMinutes();
-            let bookingEndMinutes = end.getHours() * 60 + end.getMinutes();
-
-            bookingStartMinutes = Math.max(bookingStartMinutes, dayStart);
-            bookingEndMinutes = Math.min(bookingEndMinutes, dayEnd);
-
-            if (bookingEndMinutes > bookingStartMinutes) {
-                bookedIntervals.push({ start: bookingStartMinutes, end: bookingEndMinutes });
-            }
-        });
-
-        bookedIntervals.sort((a, b) => a.start - b.start);
-        let mergedIntervals = [];
-        if (bookedIntervals.length > 0) {
-            mergedIntervals.push(bookedIntervals[0]);
-            for (let i = 1; i < bookedIntervals.length; i++) {
-                let lastMerged = mergedIntervals[mergedIntervals.length - 1];
-                if (bookedIntervals[i].start <= lastMerged.end) {
-                    lastMerged.end = Math.max(lastMerged.end, bookedIntervals[i].end);
-                } else {
-                    mergedIntervals.push(bookedIntervals[i]);
-                }
-            }
+          if (live) {
+            currentBooking = live;
+            displayStatus = 'OCCUPIED';
+          } else {
+            // any booking on the date
+            const BookingModel = getBookingModel();
+            const hasBooking = await BookingModel.exists({
+              room_id: room.id,
+              status: { $in: ['PENDING', 'APPROVED'] },
+              $or: [
+                { start_time: { $gte: dayStart, $lte: dayEnd } },
+                { end_time: { $gte: dayStart, $lte: dayEnd } },
+              ],
+            });
+            displayStatus = hasBooking ? 'OCCUPIED' : 'AVAILABLE';
+          }
         }
 
-        let totalBookedDuration = 0;
-        mergedIntervals.forEach((interval) => {
-            const actualStart = Math.max(interval.start, dayStart);
-            const actualEnd = Math.min(interval.end, dayEnd);
-            totalBookedDuration += actualEnd - actualStart;
-        });
+        return { ...room, display_status: displayStatus, current_booking: currentBooking };
+      })
+    );
 
-        return totalBookedDuration >= totalBookingMinutes;
-    },
+    return results;
+  },
 
-    getById: async (id) => {
-        const [rows] = await db.query(
-            'SELECT id, name, status FROM rooms WHERE id = ?',
-            [id]
-        );
-        return rows[0];
-    },
-    create: async (name, status = 'AVAILABLE') => {
-        const [result] = await db.execute(
-            'INSERT INTO rooms (name, status) VALUES (?, ?)',
-            [name, status]
-        );
-        return { id: result.insertId, name, status };
-    },
-    update: async (id, name, status) => {
-        const [result] = await db.execute(
-            'UPDATE rooms SET name = ?, status = ? WHERE id = ?',
-            [name, status, id]
-        );
-        return result.affectedRows > 0;
-    },
-    delete: async (id) => {
-        const [result] = await db.execute('DELETE FROM rooms WHERE id = ?', [id]);
-        return result.affectedRows > 0;
-    },
+  getById: async (id) => {
+    return RoomModel.findById(id).lean({ virtuals: true });
+  },
+
+  create: async (name, status = 'AVAILABLE') => {
+    const doc = await RoomModel.create({ name, status });
+    return doc.toJSON();
+  },
+
+  update: async (id, name, status) => {
+    const result = await RoomModel.updateOne({ _id: id }, { $set: { name, status } });
+    return result.modifiedCount > 0;
+  },
+
+  delete: async (id) => {
+    const result = await RoomModel.deleteOne({ _id: id });
+    return result.deletedCount > 0;
+  },
 };
 
 module.exports = Room;
-

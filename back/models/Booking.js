@@ -1,162 +1,178 @@
-const db = require('../db');
+// back/models/Booking.js (MongoDB + Mongoose)
+const mongoose = require('../db');
+
+const BookingSchema = new mongoose.Schema(
+  {
+    room_id: { type: mongoose.Schema.Types.Mixed, required: true }, // store as string id for simplicity
+    topic: { type: String, required: true },
+    start_time: { type: Date, required: true },
+    end_time: { type: Date, required: true },
+    guest_name: { type: String, required: true },
+    guest_email: { type: String, required: true },
+    guest_phone: { type: String, default: null },
+    guest_company: { type: String, default: null },
+    participants_emails: { type: [String], default: [] },
+    requirements: { type: [String], default: [] },
+    user_id: { type: String, default: null }, // store as string ref to User id
+    status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELED'], default: 'PENDING' },
+  },
+  { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
+);
+
+BookingSchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: (_, ret) => {
+    ret.id = ret._id.toString();
+    delete ret._id;
+    return ret;
+  },
+});
+
+const BookingModel = mongoose.model('Booking', BookingSchema);
+const getRoomModel = () => {
+  if (mongoose.models.Room) return mongoose.models.Room;
+  require('./Room');
+  return mongoose.models.Room;
+};
+const getUserModel = () => {
+  if (mongoose.models.User) return mongoose.models.User;
+  require('./User');
+  return mongoose.models.User;
+};
+
+const mapRoomName = async (rows) => {
+  const RoomModel = getRoomModel();
+  const roomIds = [...new Set(rows.map((r) => r.room_id).filter(Boolean))];
+  const rooms = await RoomModel.find({ _id: { $in: roomIds } }).select('name').lean({ virtuals: true });
+  const roomMap = new Map(rooms.map((r) => [r.id, r.name]));
+  return rows.map((row) => ({
+    ...row,
+    room_name: roomMap.get(row.room_id) || null,
+  }));
+};
 
 const Booking = {
   create: async (
-    roomId, topic, startTime, endTime,
-    guestName, guestEmail, guestPhone, guestCompany,
-    participantsEmails, requirements, userId = null
+    roomId,
+    topic,
+    startTime,
+    endTime,
+    guestName,
+    guestEmail,
+    guestPhone,
+    guestCompany,
+    participantsEmails,
+    requirements,
+    userId = null
   ) => {
-    const participantsEmailsStr = JSON.stringify(participantsEmails);
-    const requirementsStr = JSON.stringify(requirements);
-
-    const [result] = await db.execute(
-      `INSERT INTO bookings
-       (room_id, topic, start_time, end_time, guest_name, guest_email, guest_phone, guest_company, participants_emails, requirements, user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        roomId, topic, startTime, endTime,
-        guestName, guestEmail, guestPhone, guestCompany,
-        participantsEmailsStr, requirementsStr, userId
-      ]
-    );
-    return { id: result.insertId, roomId, topic, startTime, endTime, guestName, guestEmail };
+    const doc = await BookingModel.create({
+      room_id: roomId,
+      topic,
+      start_time: new Date(startTime),
+      end_time: new Date(endTime),
+      guest_name: guestName,
+      guest_email: guestEmail,
+      guest_phone: guestPhone || null,
+      guest_company: guestCompany || null,
+      participants_emails: participantsEmails || [],
+      requirements: requirements || [],
+      user_id: userId || null,
+    });
+    return doc.toJSON();
   },
 
   getAll: async () => {
-    const [rows] = await db.query(
-      `SELECT b.*, r.name as room_name
-       FROM bookings b JOIN rooms r ON b.room_id = r.id`
-    );
-    return rows;
+    const rows = await BookingModel.find().sort({ start_time: 1 }).lean({ virtuals: true });
+    return mapRoomName(rows);
   },
 
   getById: async (id) => {
-    const [rows] = await db.query(
-      `SELECT b.*, r.name as room_name
-       FROM bookings b JOIN rooms r ON b.room_id = r.id
-       WHERE b.id = ?`,
-      [id]
-    );
-    return rows[0];
+    const row = await BookingModel.findById(id).lean({ virtuals: true });
+    if (!row) return null;
+    const [mapped] = await mapRoomName([row]);
+    return mapped;
   },
 
   getByDate: async (date) => {
-    const [rows] = await db.query(
-      `SELECT b.id, b.room_id, b.topic, b.start_time, b.end_time, b.guest_name, b.guest_email, b.guest_phone, b.status,
-              r.name as room_name,
-              u.username AS employee_username, u.email AS employee_email
-       FROM bookings b
-       JOIN rooms r ON b.room_id = r.id
-       LEFT JOIN users u ON b.user_id = u.id
-       WHERE DATE(b.start_time) = ? OR DATE(b.end_time) = ?
-       ORDER BY b.start_time ASC`,
-      [date, date]
-    );
-    return rows;
+    const dayStart = new Date(`${date}T00:00:00.000Z`);
+    const dayEnd = new Date(`${date}T23:59:59.999Z`);
+    const rows = await BookingModel.find({
+      $or: [
+        { start_time: { $gte: dayStart, $lte: dayEnd } },
+        { end_time: { $gte: dayStart, $lte: dayEnd } },
+      ],
+    })
+      .sort({ start_time: 1 })
+      .lean({ virtuals: true });
+    return mapRoomName(rows);
   },
 
   getByGuestInfo: async (email, phone) => {
-    const [rows] = await db.query(
-      `SELECT b.*, r.name as room_name
-       FROM bookings b JOIN rooms r ON b.room_id = r.id
-       WHERE b.guest_email = ? OR b.guest_phone = ?
-       ORDER BY b.created_at DESC`,
-      [email, phone]
-    );
-    return rows;
+    const rows = await BookingModel.find({
+      $or: [{ guest_email: email }, { guest_phone: phone }],
+    })
+      .sort({ created_at: -1 })
+      .lean({ virtuals: true });
+    return mapRoomName(rows);
   },
 
   updateStatus: async (id, status) => {
-    const [result] = await db.execute(
-      'UPDATE bookings SET status = ? WHERE id = ?',
-      [status, id]
-    );
-    return result.affectedRows > 0;
+    const result = await BookingModel.updateOne({ _id: id }, { $set: { status } });
+    return result.modifiedCount > 0;
   },
 
   delete: async (id) => {
-    const [result] = await db.execute('DELETE FROM bookings WHERE id = ?', [id]);
-    return result.affectedRows > 0;
+    const result = await BookingModel.deleteOne({ _id: id });
+    return result.deletedCount > 0;
   },
 
   checkRoomAvailability: async (roomId, startTime, endTime, excludeBookingId = null) => {
-    let query = `
-      SELECT id FROM bookings
-      WHERE room_id = ?
-      AND (
-        (? < end_time AND ? > start_time)
-        OR (? = start_time OR ? = end_time)
-        OR (start_time < ? AND end_time > ?)
-      )
-      AND status IN ('PENDING', 'APPROVED')
-    `;
-    let params = [roomId, startTime, endTime, startTime, endTime, startTime, endTime];
-
+    const filter = {
+      room_id: roomId,
+      status: { $in: ['PENDING', 'APPROVED'] },
+      $or: [
+        { start_time: { $lt: new Date(endTime) }, end_time: { $gt: new Date(startTime) } },
+        { start_time: { $eq: new Date(startTime) } },
+        { end_time: { $eq: new Date(endTime) } },
+      ],
+    };
     if (excludeBookingId) {
-      query += ` AND id != ?`;
-      params.push(excludeBookingId);
+      filter._id = { $ne: excludeBookingId };
     }
-
-    const [rows] = await db.query(query, params);
-    return rows.length === 0;
+    const count = await BookingModel.countDocuments(filter);
+    return count === 0;
   },
 
   getByUserId: async (userId) => {
-    const [rows] = await db.query(
-      `SELECT
-          b.id, b.room_id, r.name AS room_name, b.topic, b.start_time, b.end_time,
-          b.guest_name, b.guest_email, b.guest_phone, b.guest_company,
-          b.participants_emails, b.requirements, b.user_id, b.created_at
-       FROM bookings b
-       JOIN rooms r ON b.room_id = r.id
-       WHERE b.user_id = ?
-       ORDER BY b.start_time DESC`,
-      [userId]
-    );
-    return rows.map(row => ({
-      ...row,
-      participants_emails: row.participants_emails ? JSON.parse(row.participants_emails) : [],
-      requirements: row.requirements ? JSON.parse(row.requirements) : []
-    }));
+    const rows = await BookingModel.find({ user_id: userId })
+      .sort({ start_time: -1 })
+      .lean({ virtuals: true });
+    return mapRoomName(rows);
   },
 
-  getNotificationsByUserId: async (userId) => {
-    console.log(`Fetching dummy notifications for userId: ${userId}`);
+  getNotificationsByUserId: async () => {
     const dummyNotifications = [
-      { id: 1, message: 'การประชุม Topic A จะเริ่มในอีก 15 นาที!', status: 'upcoming', date: '2025-07-11 15:00', booking_id: 101 },
-      { id: 2, message: 'คำขอจองห้อง Meeting 1 ของคุณได้รับการอนุมัติแล้ว!', status: 'approved', date: '2025-07-10 10:00', booking_id: 100 },
-      { id: 3, message: 'การจองห้อง Meeting 2 ของคุณถูกยกเลิกแล้ว!', status: 'canceled', date: '2025-07-09 09:30', booking_id: 99 },
+      { id: 1, message: 'Upcoming: Topic A in 15 minutes', status: 'upcoming', date: '2025-07-11 15:00', booking_id: 101 },
+      { id: 2, message: 'Approved: Meeting 1 at 10:00', status: 'approved', date: '2025-07-10 10:00', booking_id: 100 },
+      { id: 3, message: 'Canceled: Meeting 2 at 09:30', status: 'canceled', date: '2025-07-09 09:30', booking_id: 99 },
     ];
     return dummyNotifications;
   },
 
   getByStatus: async (status) => {
-    const [rows] = await db.query(
-      `SELECT b.*, r.name as room_name
-       FROM bookings b JOIN rooms r ON b.room_id = r.id
-       WHERE b.status = ?`,
-      [status]
-    );
-    return rows;
+    const rows = await BookingModel.find({ status }).lean({ virtuals: true });
+    return mapRoomName(rows);
   },
 
   findAllByUserOrGuest: async (userId, email, phone) => {
-    const [rows] = await db.query(
-      `SELECT
-         b.*, r.name AS room_name
-       FROM bookings b
-       JOIN rooms r ON b.room_id = r.id
-       WHERE b.user_id = ? OR b.guest_email = ? OR b.guest_phone = ?
-       ORDER BY b.start_time DESC`,
-      [userId, email, phone]
-    );
-
-    return rows.map(row => ({
-      ...row,
-      participants_emails: row.participants_emails ? JSON.parse(row.participants_emails) : [],
-      requirements: row.requirements ? JSON.parse(row.requirements) : []
-    }));
-  }
+    const rows = await BookingModel.find({
+      $or: [{ user_id: userId }, { guest_email: email }, { guest_phone: phone }],
+    })
+      .sort({ start_time: -1 })
+      .lean({ virtuals: true });
+    return mapRoomName(rows);
+  },
 };
 
 module.exports = Booking;

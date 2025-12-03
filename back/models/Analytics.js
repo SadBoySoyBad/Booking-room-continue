@@ -1,75 +1,92 @@
-// back/models/Analytics.js
-const db = require('../db');
+// back/models/Analytics.js (MongoDB + Mongoose)
+const mongoose = require('../db');
+
+const getBookingModel = () => {
+  if (mongoose.models.Booking) return mongoose.models.Booking;
+  require('./Booking');
+  return mongoose.models.Booking;
+};
+const getUserModel = () => {
+  if (mongoose.models.User) return mongoose.models.User;
+  require('./User');
+  return mongoose.models.User;
+};
 
 const Analytics = {
-    // ดึงจำนวนการจองทั้งหมด
-    getTotalReservations: async () => {
-        const [rows] = await db.query(`SELECT COUNT(*) as count FROM bookings`);
-        return rows[0];
-    },
+  getTotalReservations: async () => {
+    const BookingModel = getBookingModel();
+    const count = await BookingModel.countDocuments();
+    return { count };
+  },
 
-    // ดึงจำนวนผู้เข้าร่วมทั้งหมด (อาจนับจากการจองที่ 'APPROVED' หรือจำนวน participants)
-    getTotalAttendance: async () => {
-        // ตัวอย่าง: นับการจองที่ APPROVED
-        const [rows] = await db.query(`SELECT COUNT(*) as count FROM bookings WHERE status = 'APPROVED'`);
-        // ถ้า participants_emails เป็น JSON array:
-        // const [rows] = await db.query(`SELECT SUM(JSON_LENGTH(participants_emails)) as count FROM bookings WHERE status = 'APPROVED'`);
-        return rows[0];
-    },
+  getTotalAttendance: async () => {
+    const BookingModel = getBookingModel();
+    const count = await BookingModel.countDocuments({ status: 'APPROVED' });
+    return { count };
+  },
 
-    // ดึงอันดับบริษัทที่จองบ่อยที่สุด
-    getLeaderboardReservations: async (limit = 5) => {
-        const [rows] = await db.query(
-            `SELECT guest_company as company, COUNT(*) as reservations
-             FROM bookings
-             WHERE guest_company IS NOT NULL AND guest_company != ''
-             GROUP BY guest_company
-             ORDER BY reservations DESC
-             LIMIT ?`,
-            [limit]
-        );
-        return rows;
-    },
+  getLeaderboardReservations: async (limit = 5) => {
+    const BookingModel = getBookingModel();
+    const rows = await BookingModel.aggregate([
+      { $match: { guest_company: { $ne: null, $ne: '' } } },
+      { $group: { _id: '$guest_company', reservations: { $sum: 1 } } },
+      { $sort: { reservations: -1 } },
+      { $limit: limit },
+      { $project: { company: '$_id', reservations: 1, _id: 0 } },
+    ]);
+    return rows;
+  },
 
-    // ดึงจำนวนการจองรายเดือนสำหรับกราฟ (Monthly Attendance)
-    getMonthlyBookingCounts: async (year = new Date().getFullYear()) => {
-        const [rows] = await db.query(
-            `SELECT
-                DATE_FORMAT(start_time, '%Y-%m') as month,
-                COUNT(*) as count
-             FROM bookings
-             WHERE YEAR(start_time) = ? AND status IN ('PENDING', 'APPROVED')
-             GROUP BY month
-             ORDER BY month ASC`,
-            [year]
-        );
-        // สามารถแปลงให้อยู่ในรูปแบบที่ Frontend ต้องการได้ที่นี่ หรือใน Controller
-        return rows;
-    },
+  getMonthlyBookingCounts: async (year = new Date().getFullYear()) => {
+    const BookingModel = getBookingModel();
+    const start = new Date(`${year}-01-01T00:00:00.000Z`);
+    const end = new Date(`${year + 1}-01-01T00:00:00.000Z`);
+    const rows = await BookingModel.aggregate([
+      {
+        $match: {
+          start_time: { $gte: start, $lt: end },
+          status: { $in: ['PENDING', 'APPROVED'] },
+        },
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m', date: '$start_time' } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+      { $project: { month: '$_id', count: 1, _id: 0 } },
+    ]);
+    return rows;
+  },
 
-    // ดึงจำนวน Events (bookings) แยกตาม Role ของผู้จอง (Guest, Employee, Admin)
-    getEventsByRole: async () => {
-        const [rows] = await db.query(
-            `SELECT u.role, COUNT(b.id) as count
-             FROM bookings b
-             JOIN users u ON b.user_id = u.id
-             GROUP BY u.role`
-        );
-        // สำหรับ Guest Booking ที่ไม่มี user_id แต่มี guest_email
-        const [guestBookings] = await db.query(
-            `SELECT COUNT(*) as count FROM bookings WHERE user_id IS NULL AND guest_email IS NOT NULL`
-        );
+  getEventsByRole: async () => {
+    const BookingModel = getBookingModel();
+    const UserModel = getUserModel();
+    const rows = await BookingModel.aggregate([
+      { $match: { user_id: { $ne: null } } },
+      {
+        $lookup: {
+          from: UserModel.collection.name,
+          localField: 'user_id',
+          foreignField: '_id',
+          as: 'user',
+          pipeline: [{ $project: { role: 1 } }],
+        },
+      },
+      { $unwind: '$user' },
+      { $group: { _id: '$user.role', count: { $sum: 1 } } },
+    ]);
 
-        let result = {};
-        rows.forEach(row => {
-            result[row.role.toLowerCase()] = row.count;
-        });
-        
-        // เพิ่ม Guest ที่ไม่ได้ผูกกับ user_id
-        result['guest'] = (result['guest'] || 0) + guestBookings[0].count;
+    const guestCount = await BookingModel.countDocuments({ user_id: null, guest_email: { $ne: null } });
 
-        return result; // เช่น { employee: 10, admin: 2, guest: 5 }
-    },
+    const result = {};
+    rows.forEach((row) => {
+      if (row._id) result[row._id.toLowerCase()] = row.count;
+    });
+    result['guest'] = (result['guest'] || 0) + guestCount;
+    return result;
+  },
 };
 
 module.exports = Analytics;
