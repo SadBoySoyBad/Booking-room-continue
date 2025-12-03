@@ -55,17 +55,28 @@ router.get('/google/callback', (req, res, next) => {
 // ✅ Guest login route
 router.post('/guest-login', authController.guestLogin);
 
+// Caching guard for auth endpoints
+const noStore = (req, res, next) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Vercel-CDN-Cache-Control', 'no-store');
+    res.set('ETag', Date.now().toString());
+    next();
+};
+
 // ✅ Token verification route
-router.get('/verify', authMiddleware, (req, res) => {
+router.get('/verify', noStore, authMiddleware, (req, res) => {
     res.json({ message: 'Token is valid', user: req.user });
 });
 
-// ✅ Logout route
-router.get('/logout', authController.logout);
+// ✅ Logout route (GET/POST) with cache disabled
+router.get('/logout', noStore, authController.logout);
+router.post('/logout', noStore, authController.logout);
 
 // ✅ NEW: MyInfo route (ตรวจสอบสถานะ login จากทั้ง cookie + JWT)
 // Use authMiddleware so cookie JWT (auth_token) is accepted
-router.get('/myinfo', authMiddleware, (req, res) => {
+router.get('/myinfo', noStore, authMiddleware, (req, res) => {
     return res.status(200).json({ user: req.user });
 });
 

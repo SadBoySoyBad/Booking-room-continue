@@ -13,7 +13,7 @@ export const useAuth = () => {
       const headers: Record<string, string> = {}
       const t = localStorage.getItem('token')
       if (t) headers['Authorization'] = `Bearer ${t}`
-      const res = await fetch(`${config.public.apiBaseURL}/auth/myinfo`, {
+      const res = await fetch(`${config.public.apiBaseURL}/auth/myinfo?ts=${Date.now()}` , {
         credentials: 'include',
         headers
       })
@@ -31,8 +31,10 @@ export const useAuth = () => {
   const logout = async () => {
     try {
       localStorage.removeItem('token')
-      await fetch(`${config.public.apiBaseURL}/auth/logout`, {
-        credentials: 'include'
+      await fetch(`${config.public.apiBaseURL}/auth/logout?ts=${Date.now()}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
       })
     } catch {}
     user.value = null

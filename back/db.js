@@ -1,60 +1,45 @@
-// db.js
+// back/db.js - MongoDB connection via Mongoose
 require('dotenv').config();
-const mysql = require('mysql2/promise');
+const mongoose = require('mongoose');
 
-// Build config from env and print a safe debug line (no passwords)
-const dbConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: Number(process.env.DB_PORT) || 3306,
-    // Enable TLS for providers like PlanetScale when DB_SSL=true
-    ssl: process.env.DB_SSL === 'true' ? {} : undefined,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS) || 10000
-};
+const mongoUri = process.env.MONGODB_URI;
 
-try {
-    console.log('[DB] Using config:', {
-        host: dbConfig.host || '(unset)',
-        user: dbConfig.user || '(unset)',
-        database: dbConfig.database || '(unset)',
-        port: dbConfig.port,
-        ssl: !!dbConfig.ssl,
-        nodeEnv: process.env.NODE_ENV
-    });
-} catch {}
-
-const pool = mysql.createPool(dbConfig);
-
-// เพิ่มฟังก์ชันสำหรับ delay (รอ)
-const delay = ms => new Promise(res => setTimeout(res, ms));
-
-async function testDbConnection() {
-    let retries = 5; // ลองเชื่อมต่อ 5 ครั้ง
-    const delayMs = 5000; // รอ 5 วินาทีระหว่างการลองแต่ละครั้ง
-
-    while (retries > 0) {
-        try {
-            const connection = await pool.getConnection();
-            console.log('Successfully connected to MariaDB!');
-            connection.release();
-            return; // เชื่อมต่อสำเร็จ ออกจากลูป
-        } catch (error) {
-            console.error(`Error connecting to MariaDB: ${error.message}. Retrying... (${retries} attempts left)`);
-            retries--;
-            if (retries === 0) {
-                console.error('Failed to connect to MariaDB after multiple retries. Exiting process.');
-                process.exit(1); // หากลองหลายครั้งแล้วยังไม่ได้ ให้จบ process
-            }
-            await delay(delayMs); // รอสักครู่ก่อนลองใหม่
-        }
-    }
+if (!mongoUri) {
+  console.error('[DB] Missing MONGODB_URI env. Please set it to your MongoDB Atlas connection string.');
 }
 
-testDbConnection();
+mongoose.set('strictQuery', true);
 
-module.exports = pool;
+async function connectMongo() {
+  try {
+    console.log('[DB] Connecting to MongoDB...', { nodeEnv: process.env.NODE_ENV });
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: Number(process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS) || 10000,
+    });
+    console.log('[DB] Connected to MongoDB Atlas');
+
+    // Seed default rooms if empty (Meeting 1-4) for fresh databases
+    try {
+      const RoomModel = require('./models/Room');
+      const roomCount = await RoomModel.countDocuments();
+      if (roomCount === 0) {
+        await RoomModel.insertMany([
+          { name: 'Meeting 1', status: 'AVAILABLE' },
+          { name: 'Meeting 2', status: 'AVAILABLE' },
+          { name: 'Meeting 3', status: 'AVAILABLE' },
+          { name: 'Meeting 4', status: 'AVAILABLE' },
+        ]);
+        console.log('[DB] Seeded default rooms (Meeting 1-4)');
+      }
+    } catch (seedErr) {
+      console.warn('[DB] Seed rooms skipped:', seedErr.message);
+    }
+  } catch (err) {
+    console.error('[DB] MongoDB connection error:', err.message);
+    process.exit(1);
+  }
+}
+
+connectMongo();
+
+module.exports = mongoose;
