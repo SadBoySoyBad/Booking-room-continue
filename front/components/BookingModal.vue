@@ -161,8 +161,10 @@
                 :class="[
                   'px-3 py-1 rounded-full border text-xs font-semibold active:bg-red-100 active:scale-95 transition-all duration-150 cursor-pointer ',
                   form.roomId === roomOpt.id ? 'bg-red-500 text-white' : 'text-gray-700 hover:bg-gray-100',
+                  roomOpt.display_status === 'OCCUPIED' || roomOpt.status === 'MAINTENANCE' ? 'opacity-50 cursor-not-allowed' : ''
                 ]"
-                @click="form.roomId = roomOpt.id"
+                :disabled="roomOpt.display_status === 'OCCUPIED' || roomOpt.status === 'MAINTENANCE'"
+                @click="selectRoom(roomOpt)"
               >
                 {{ roomOpt.name }}
               </button>
@@ -266,8 +268,14 @@ const roomOptions = ref([]);
 async function fetchRooms() {
   try {
     const response = await api('/rooms');
-    roomOptions.value = response;
-    console.log("Fetched rooms:", response);
+    // normalize to ensure id is present and consistent string type
+    roomOptions.value = (response || []).map((r) => ({
+      id: String(r.id || r._id || r.room_id || r.name || ''),
+      name: r.name || r.room_name || 'Room',
+      status: r.status || 'AVAILABLE',
+      display_status: r.display_status || r.status || 'AVAILABLE',
+    }));
+    console.log("Fetched rooms (normalized):", roomOptions.value);
   } catch (error) {
     console.error("Error fetching rooms:", error);
     roomOptions.value = [];
@@ -322,6 +330,11 @@ function nextMonth() {
 const selectDate = (date) => {
   form.value.date = date;
 }
+
+const selectRoom = (roomOpt) => {
+  if (!roomOpt || roomOpt.display_status === 'OCCUPIED' || roomOpt.status === 'MAINTENANCE') return;
+  form.value.roomId = roomOpt.id;
+};
 
 const form = ref({
   topic: '',
