@@ -3,7 +3,7 @@ const mongoose = require('../db');
 
 const BookingSchema = new mongoose.Schema(
   {
-    room_id: { type: mongoose.Schema.Types.Mixed, required: true }, // store as string id for simplicity
+    room_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Room', required: true },
     topic: { type: String, required: true },
     start_time: { type: Date, required: true },
     end_time: { type: Date, required: true },
@@ -13,7 +13,7 @@ const BookingSchema = new mongoose.Schema(
     guest_company: { type: String, default: null },
     participants_emails: { type: [String], default: [] },
     requirements: { type: [String], default: [] },
-    user_id: { type: String, default: null }, // store as string ref to User id
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELED'], default: 'PENDING' },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
@@ -24,6 +24,8 @@ BookingSchema.set('toJSON', {
   versionKey: false,
   transform: (_, ret) => {
     ret.id = ret._id.toString();
+    if (ret.room_id) ret.room_id = ret.room_id.toString();
+    if (ret.user_id) ret.user_id = ret.user_id.toString();
     delete ret._id;
     return ret;
   },
@@ -43,12 +45,24 @@ const getUserModel = () => {
 
 const mapRoomName = async (rows) => {
   const RoomModel = getRoomModel();
-  const roomIds = [...new Set(rows.map((r) => r.room_id).filter(Boolean))];
-  const rooms = await RoomModel.find({ _id: { $in: roomIds } }).select('name').lean({ virtuals: true });
+  const roomIds = [];
+  const roomIdStrings = [];
+  rows.forEach((r) => {
+    if (r.room_id) {
+      roomIdStrings.push(String(r.room_id));
+      try {
+        roomIds.push(new mongoose.Types.ObjectId(String(r.room_id)));
+      } catch {
+        // skip invalid ObjectId
+      }
+    }
+  });
+  const uniqueObjIds = [...new Set(roomIds.map((id) => id.toString()))].map((s) => new mongoose.Types.ObjectId(s));
+  const rooms = await RoomModel.find({ _id: { $in: uniqueObjIds } }).select('name').lean({ virtuals: true });
   const roomMap = new Map(rooms.map((r) => [r.id, r.name]));
   return rows.map((row) => ({
     ...row,
-    room_name: roomMap.get(row.room_id) || null,
+    room_name: roomMap.get(String(row.room_id)) || null,
   }));
 };
 
@@ -66,8 +80,21 @@ const Booking = {
     requirements,
     userId = null
   ) => {
+    const toObjectId = (id) => {
+      try {
+        return new mongoose.Types.ObjectId(String(id));
+      } catch {
+        return null;
+      }
+    };
+    const roomObjectId = toObjectId(roomId);
+    const userObjectId = userId ? toObjectId(userId) : null;
+    if (!roomObjectId) {
+      throw new Error('Invalid room id');
+    }
+
     const doc = await BookingModel.create({
-      room_id: roomId,
+      room_id: roomObjectId,
       topic,
       start_time: new Date(startTime),
       end_time: new Date(endTime),
@@ -77,7 +104,7 @@ const Booking = {
       guest_company: guestCompany || null,
       participants_emails: participantsEmails || [],
       requirements: requirements || [],
-      user_id: userId || null,
+      user_id: userObjectId || null,
     });
     return doc.toJSON();
   },
@@ -128,8 +155,16 @@ const Booking = {
   },
 
   checkRoomAvailability: async (roomId, startTime, endTime, excludeBookingId = null) => {
+    const toObjectId = (id) => {
+      try {
+        return new mongoose.Types.ObjectId(String(id));
+      } catch {
+        return null;
+      }
+    };
+    const roomObjectId = toObjectId(roomId);
     const filter = {
-      room_id: roomId,
+      room_id: roomObjectId,
       status: { $in: ['PENDING', 'APPROVED'] },
       $or: [
         { start_time: { $lt: new Date(endTime) }, end_time: { $gt: new Date(startTime) } },

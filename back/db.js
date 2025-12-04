@@ -41,24 +41,34 @@ async function connectMongo() {
     try {
       require('./models/User');
       const UserModel = mongoose.models.User;
-      const indexes = await UserModel.collection.indexes();
-      const ensureSparseUnique = async (field) => {
+
+      // Force recreate indexes for google_id / microsoft_id to avoid duplicate null issues
+      const recreateIndex = async (field) => {
         const name = `${field}_1`;
-        const idx = indexes.find((i) => i.name === name);
-        const isSparseUnique = idx && idx.unique && idx.sparse;
-        if (!isSparseUnique) {
-          if (idx) {
-            console.warn(`[DB] Dropping non-sparse index ${name} to recreate as sparse unique`);
-            await UserModel.collection.dropIndex(name);
+        try {
+          await UserModel.collection.dropIndex(name);
+          console.log(`[DB] Dropped existing index ${name}`);
+        } catch (dropErr) {
+          if (dropErr.codeName !== 'IndexNotFound') {
+            console.warn(`[DB] Drop index ${name} skipped: ${dropErr.message}`);
           }
-          await UserModel.collection.createIndex({ [field]: 1 }, { unique: true, sparse: true, name });
-          console.log(`[DB] Ensured sparse unique index on ${field}`);
         }
+        await UserModel.collection.createIndex(
+          { [field]: 1 },
+          {
+            name,
+            unique: true,
+            sparse: true,
+            partialFilterExpression: { [field]: { $exists: true, $ne: null } },
+          }
+        );
+        console.log(`[DB] Created sparse unique index on ${field} with partialFilterExpression`);
       };
-      await ensureSparseUnique('google_id');
-      await ensureSparseUnique('microsoft_id');
+
+      await recreateIndex('google_id');
+      await recreateIndex('microsoft_id');
     } catch (idxErr) {
-      console.warn('[DB] Index check skipped:', idxErr.message);
+      console.warn('[DB] Index recreation skipped:', idxErr.message);
     }
   } catch (err) {
     console.error('[DB] MongoDB connection error:', err.message);
