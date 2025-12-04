@@ -36,6 +36,30 @@ async function connectMongo() {
     } catch (seedErr) {
       console.warn('[DB] Seed rooms skipped:', seedErr.message);
     }
+
+    // Ensure sparse unique indexes on optional OAuth ids (avoid duplicate null errors)
+    try {
+      require('./models/User');
+      const UserModel = mongoose.models.User;
+      const indexes = await UserModel.collection.indexes();
+      const ensureSparseUnique = async (field) => {
+        const name = `${field}_1`;
+        const idx = indexes.find((i) => i.name === name);
+        const isSparseUnique = idx && idx.unique && idx.sparse;
+        if (!isSparseUnique) {
+          if (idx) {
+            console.warn(`[DB] Dropping non-sparse index ${name} to recreate as sparse unique`);
+            await UserModel.collection.dropIndex(name);
+          }
+          await UserModel.collection.createIndex({ [field]: 1 }, { unique: true, sparse: true, name });
+          console.log(`[DB] Ensured sparse unique index on ${field}`);
+        }
+      };
+      await ensureSparseUnique('google_id');
+      await ensureSparseUnique('microsoft_id');
+    } catch (idxErr) {
+      console.warn('[DB] Index check skipped:', idxErr.message);
+    }
   } catch (err) {
     console.error('[DB] MongoDB connection error:', err.message);
     process.exit(1);
