@@ -20,7 +20,9 @@ async function connectMongo() {
 
     // Seed default rooms if empty (Meeting 1-4) for fresh databases
     try {
-      const RoomModel = require('./models/Room');
+      // ensure Room model is registered, then pull from mongoose.models
+      require('./models/Room');
+      const RoomModel = mongoose.models.Room;
       const roomCount = await RoomModel.countDocuments();
       if (roomCount === 0) {
         await RoomModel.insertMany([
