@@ -1,10 +1,13 @@
 // back/models/Booking.js (MongoDB + Mongoose)
 const mongoose = require('../db');
+const { dayBounds } = require('../utils/dates');
+const { fail } = require('../utils/http');
 
 const BookingSchema = new mongoose.Schema(
   {
     room_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Room', required: true },
-    topic: { type: String, required: true },
+    topic: { type: String, required: true, trim: true },
+    google_event_id: { type: String, default: null },
     start_time: { type: Date, required: true },
     end_time: { type: Date, required: true },
     guest_name: { type: String, required: true },
@@ -31,6 +34,7 @@ BookingSchema.set('toJSON', {
   },
 });
 
+BookingSchema.index({ room_id: 1, status: 1, start_time: 1, end_time: 1 });
 const BookingModel = mongoose.model('Booking', BookingSchema);
 const getRoomModel = () => {
   if (mongoose.models.Room) return mongoose.models.Room;
@@ -60,9 +64,12 @@ const mapRoomName = async (rows) => {
   const uniqueObjIds = [...new Set(roomIds.map((id) => id.toString()))].map((s) => new mongoose.Types.ObjectId(s));
   const rooms = await RoomModel.find({ _id: { $in: uniqueObjIds } }).select('name').lean({ virtuals: true });
   const roomMap = new Map(rooms.map((r) => [r.id, r.name]));
+  const users = await getUserModel().find({ _id: { $in: rows.map(row => row.user_id).filter(Boolean) } }).select('role').lean();
+  const roles = new Map(users.map(user => [user.id, user.role]));
   return rows.map((row) => ({
     ...row,
     room_name: roomMap.get(String(row.room_id)) || null,
+    user_role: roles.get(String(row.user_id)) || 'guest',
   }));
 };
 
@@ -93,20 +100,26 @@ const Booking = {
       throw new Error('Invalid room id');
     }
 
-    const doc = await BookingModel.create({
-      room_id: roomObjectId,
-      topic,
-      start_time: new Date(startTime),
-      end_time: new Date(endTime),
-      guest_name: guestName,
-      guest_email: guestEmail,
-      guest_phone: guestPhone || null,
-      guest_company: guestCompany || null,
-      participants_emails: participantsEmails || [],
-      requirements: requirements || [],
-      user_id: userObjectId || null,
+    return mongoose.connection.transaction(async (session) => {
+      // Every reservation/status change writes the same room document first.
+      // Mongo retries concurrent writers, then rechecks overlap in the new snapshot.
+      const room = await getRoomModel().findOneAndUpdate({ _id: roomObjectId },
+        { $inc: { booking_version: 1 } }, { session });
+      if (!room) throw fail(404, 'Selected room not found.');
+      if (room.status === 'MAINTENANCE') throw fail(409, 'Selected room is under maintenance.');
+      const overlap = await BookingModel.exists({ room_id: roomObjectId,
+        status: { $in: ['PENDING', 'APPROVED'] },
+        start_time: { $lt: new Date(endTime) }, end_time: { $gt: new Date(startTime) },
+      }).session(session);
+      if (overlap) throw fail(409, 'Room is already booked for the selected time slot.');
+      const [doc] = await BookingModel.create([{
+        room_id: roomObjectId, topic, start_time: new Date(startTime), end_time: new Date(endTime),
+        guest_name: guestName, guest_email: guestEmail, guest_phone: guestPhone || null,
+        guest_company: guestCompany || null, participants_emails: participantsEmails || [],
+        requirements: requirements || [], user_id: userObjectId,
+      }], { session });
+      return doc.toJSON();
     });
-    return doc.toJSON();
   },
 
   getAll: async () => {
@@ -122,13 +135,10 @@ const Booking = {
   },
 
   getByDate: async (date) => {
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    const dayEnd = new Date(`${date}T23:59:59.999Z`);
+    const { start: dayStart, end: dayEnd } = dayBounds(date);
     const rows = await BookingModel.find({
-      $or: [
-        { start_time: { $gte: dayStart, $lte: dayEnd } },
-        { end_time: { $gte: dayStart, $lte: dayEnd } },
-      ],
+      start_time: { $lt: dayEnd }, end_time: { $gt: dayStart },
+      status: { $in: ['PENDING', 'APPROVED'] },
     })
       .sort({ start_time: 1 })
       .lean({ virtuals: true });
@@ -137,7 +147,7 @@ const Booking = {
 
   getByGuestInfo: async (email, phone) => {
     const rows = await BookingModel.find({
-      $or: [{ guest_email: email }, { guest_phone: phone }],
+      guest_email: email, guest_phone: phone,
     })
       .sort({ created_at: -1 })
       .lean({ virtuals: true });
@@ -145,8 +155,22 @@ const Booking = {
   },
 
   updateStatus: async (id, status) => {
-    const result = await BookingModel.updateOne({ _id: id }, { $set: { status } });
-    return result.modifiedCount > 0;
+    return mongoose.connection.transaction(async (session) => {
+      const booking = await BookingModel.findById(id).session(session);
+      if (!booking) return false;
+      const room = await getRoomModel().findOneAndUpdate({ _id: booking.room_id },
+        { $inc: { booking_version: 1 } }, { session });
+      if (['PENDING', 'APPROVED'].includes(status)) {
+        if (!room || room.status === 'MAINTENANCE') throw fail(409, 'Room is unavailable.');
+        if (await BookingModel.exists({ _id: { $ne: booking._id }, room_id: booking.room_id,
+          status: { $in: ['PENDING', 'APPROVED'] }, start_time: { $lt: booking.end_time },
+          end_time: { $gt: booking.start_time },
+        }).session(session)) throw fail(409, 'Room is already booked for this time slot.');
+      }
+      booking.status = status;
+      await booking.save({ session });
+      return true;
+    });
   },
 
   delete: async (id) => {
@@ -186,13 +210,13 @@ const Booking = {
     return mapRoomName(rows);
   },
 
-  getNotificationsByUserId: async () => {
-    const dummyNotifications = [
-      { id: 1, message: 'Upcoming: Topic A in 15 minutes', status: 'upcoming', date: '2025-07-11 15:00', booking_id: 101 },
-      { id: 2, message: 'Approved: Meeting 1 at 10:00', status: 'approved', date: '2025-07-10 10:00', booking_id: 100 },
-      { id: 3, message: 'Canceled: Meeting 2 at 09:30', status: 'canceled', date: '2025-07-09 09:30', booking_id: 99 },
-    ];
-    return dummyNotifications;
+  getNotificationsByUserId: async (userId) => {
+    const rows = await Booking.getByUserId(userId);
+    return rows.slice(0, 50).map((row) => ({
+      id: row.id, booking_id: row.id, status: row.status.toLowerCase(),
+      date: row.updated_at || row.created_at,
+      message: `${row.status}: ${row.topic} (${row.room_name || 'Meeting room'})`,
+    }));
   },
 
   getByStatus: async (status) => {
@@ -202,7 +226,7 @@ const Booking = {
 
   findAllByUserOrGuest: async (userId, email, phone) => {
     const rows = await BookingModel.find({
-      $or: [{ user_id: userId }, { guest_email: email }, { guest_phone: phone }],
+      user_id: userId,
     })
       .sort({ start_time: -1 })
       .lean({ virtuals: true });

@@ -56,7 +56,8 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router'; // สำหรับดึง query parameters
 
-const route = useRoute(); // เรียกใช้ useRoute
+const route = useRoute();
+const safeArray = (value) => { try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }; // เรียกใช้ useRoute
 
 const bookingDetails = ref({
   topic: '',
@@ -83,8 +84,8 @@ onMounted(() => {
       guestEmail: route.query.guestEmail || 'ไม่ระบุอีเมล',
       guestPhone: route.query.guestPhone || '',
       guestCompany: route.query.guestCompany || '',
-      participantsEmails: route.query.participantsEmails ? JSON.parse(route.query.participantsEmails) : [],
-      requirements: route.query.requirements ? JSON.parse(route.query.requirements) : []
+      participantsEmails: safeArray(route.query.participantsEmails),
+      requirements: safeArray(route.query.requirements)
     };
   }
 });

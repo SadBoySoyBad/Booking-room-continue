@@ -69,19 +69,9 @@ const props = defineProps({
   },
 });
 
-// ฟังก์ชันสำหรับอนุมัติการร้องขอ (ตัวอย่าง)
-const approveRequest = (index) => {
-  alert(`Request ${index + 1} approved!`);
-  // คุณสามารถ emit event ไปยัง parent component เพื่ออัปเดตข้อมูลจริงได้
-  // emit('approve', index);
-};
-
-// ฟังก์ชันสำหรับปฏิเสธการร้องขอ (ตัวอย่าง)
-const denyRequest = (index) => {
-  alert(`Request ${index + 1} denied!`);
-  // คุณสามารถ emit event ไปยัง parent component เพื่ออัปเดตข้อมูลจริงได้
-  // emit('deny', index);
-};
+const emit = defineEmits(['update-request-status']);
+const approveRequest = (index) => emit('update-request-status', { id: props.requestsData[index].id, status: 'APPROVED' });
+const denyRequest = (index) => emit('update-request-status', { id: props.requestsData[index].id, status: 'REJECTED' });
 </script>
 
 <style scoped>

@@ -1,83 +1,45 @@
-// routes/authRoutes.js
-const express = require('express');
-const router = express.Router();
+const router = require('express').Router();
 const passport = require('passport');
-const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const authController = require('../controllers/authController');
+const auth = require('../controllers/authController');
 const { authMiddleware } = require('../middleware/authMiddleware');
-
-// ✅ Google OAuth login route
-router.get('/google', (req, res, next) => {
+const { publicUser } = require('../utils/http');
+for (const provider of ['google', 'microsoft']) {
+  router.get(`/${provider}`, (req, res, next) => {
+    if (!passport._strategy(provider)) return res.status(503).json({ message: `${provider} sign-in has not been configured.` });
     const state = crypto.randomBytes(32).toString('hex');
-    // cookie-session does not implement req.session.save; just assign
-    if (req.session) {
-        req.session.state = state;
-        req.session.returnTo = process.env.FRONTEND_URL + '/booking';
-    }
-
-    passport.authenticate('google', {
-        scope: [
-            'openid',
-            'https://www.googleapis.com/auth/userinfo.email',
-            'https://www.googleapis.com/auth/userinfo.profile'
-        ],
-        accessType: 'offline',
-        prompt: 'consent',
-        includeGrantedScopes: true,
-        state: state,
-        session: false
+    req.session.state = state;
+    req.session.provider = provider;
+    req.session.returnTo = `${process.env.FRONTEND_URL}/booking`;
+    passport.authenticate(provider, { session: false, state,
+      ...(provider === 'google' ? {
+        scope: ['openid', 'email', 'profile', ...(process.env.GOOGLE_CALENDAR_ENABLED === 'true' ? ['https://www.googleapis.com/auth/calendar.events'] : [])],
+        accessType: 'offline', prompt: 'consent', includeGrantedScopes: true,
+      } : {}),
     })(req, res, next);
-});
-
-// ✅ Google OAuth callback
-router.get('/google/callback', (req, res, next) => {
-    if (!req.session || req.query.state !== req.session.state) {
-        return res.status(400).send('Invalid state parameter. Possible CSRF attack.');
+  });
+  router.get(`/${provider}/callback`, (req, res, next) => {
+    if (!req.session?.state || req.query.state !== req.session.state || req.session.provider !== provider) {
+      return res.status(400).json({ message: 'Invalid OAuth state.' });
     }
-
-    passport.authenticate('google', {
-        failureRedirect: `${process.env.FRONTEND_URL}/login?error=google_login_failed`,
-        session: false
-    })(req, res, (err) => {
-        if (err) {
-            return res.redirect(`${process.env.FRONTEND_URL}/login?error=${err.message}`);
-        }
-
-        const returnTo = req.session.returnTo || `${process.env.FRONTEND_URL}/booking`;
-        delete req.session.returnTo;
-        delete req.session.state;
-
-        authController.oauthSuccess(req, res, returnTo);
-    });
-});
-
-// ✅ Guest login route
-router.post('/guest-login', authController.guestLogin);
-
-// Caching guard for auth endpoints
-const noStore = (req, res, next) => {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-    res.set('Vercel-CDN-Cache-Control', 'no-store');
-    res.set('ETag', Date.now().toString());
-    next();
-};
-
-// ✅ Token verification route
-router.get('/verify', noStore, authMiddleware, (req, res) => {
-    res.json({ message: 'Token is valid', user: req.user });
-});
-
-// ✅ Logout route (GET/POST) with cache disabled
-router.get('/logout', noStore, authController.logout);
-router.post('/logout', noStore, authController.logout);
-
-// ✅ NEW: MyInfo route (ตรวจสอบสถานะ login จากทั้ง cookie + JWT)
-// Use authMiddleware so cookie JWT (auth_token) is accepted
-router.get('/myinfo', noStore, authMiddleware, (req, res) => {
-    return res.status(200).json({ user: req.user });
-});
-
+    const returnTo = req.session.returnTo;
+    req.session = null;
+    if (!passport._strategy(provider)) return res.status(503).json({ message: 'Sign-in is not configured.' });
+    passport.authenticate(provider, { session: false }, (error, user) => {
+      if (error || !user) return res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
+      req.user = user;
+      auth.oauthSuccess(req, res, returnTo);
+    })(req, res, next);
+  });
+}
+router.post('/guest-login', auth.guestLogin);
+router.get('/verify', authMiddleware, (req, res) => res.json({ message: 'Token is valid', user: publicUser(req.user) }));
+router.get('/myinfo', (req, res, next) => {
+  const hasBearer = /^Bearer\s+\S+$/i.test(req.headers.authorization || '');
+  const hasCookie = /(?:^|;\s*)auth_token=[^;]/.test(req.headers.cookie || '');
+  if (!hasBearer && !hasCookie) return res.json({ user: null });
+  return authMiddleware(req, res, next);
+}, (req, res) => res.json({ user: publicUser(req.user) }));
+router.get('/logout', auth.logout);
+router.post('/logout', auth.logout);
 module.exports = router;

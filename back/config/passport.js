@@ -1,81 +1,44 @@
-// back\config\passport.js
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-// const MicrosoftStrategy = require('passport-microsoft').Strategy; // สำหรับในอนาคต
+const MicrosoftStrategy = require('passport-microsoft').Strategy;
 const User = require('../models/User');
 
-// Serialize user for the session
-passport.serializeUser((user, done) => {
-    done(null, user.id);
-});
-
-// Deserialize user from the session
-passport.deserializeUser(async (id, done) => {
-    try {
-        const user = await User.getById(id);
-        done(null, user);
-    } catch (error) {
-        done(error, null);
+const verify = (provider) => async (accessToken, refreshToken, params, profile, done) => {
+  try {
+    const email = profile.emails?.[0]?.value?.trim().toLowerCase();
+    if (!email || (provider === 'google' && profile._json?.email_verified !== true)) return done(null, false);
+    let user = provider === 'google' ? await User.findByGoogleId(profile.id) : await User.findByMicrosoftId(profile.id);
+    if (!user) user = await User.findByEmail(email);
+    const expiry = params.expires_in ? new Date(Date.now() + Number(params.expires_in) * 1000) : null;
+    if (!user) {
+      // Email is stable and unique even when two people share a display name.
+      user = await User.createOAuthUser(profile.displayName || email, email,
+        provider === 'google' ? profile.id : null,
+        provider === 'google' ? accessToken : null,
+        provider === 'google' ? refreshToken : null,
+        provider === 'google' ? expiry : null,
+        provider === 'microsoft' ? profile.id : null,
+        provider === 'microsoft' ? accessToken : null,
+        provider === 'microsoft' ? refreshToken : null,
+        provider === 'microsoft' ? expiry : null,
+        provider, email.split('@')[1].split('.')[0]);
+    } else if (provider === 'google') {
+      await User.updateGoogleAuth(user.id, profile.id, accessToken, refreshToken, expiry);
+    } else {
+      await User.updateMicrosoftAuth(user.id, profile.id, accessToken, refreshToken, expiry);
     }
-});
-
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.GOOGLE_REDIRECT_URI
-},
-async (accessToken, refreshToken, profile, done) => {
-    try {
-        let user = await User.findByGoogleId(profile.id);
-
-        if (!user && profile.emails && profile.emails[0]) {
-            user = await User.findByEmail(profile.emails[0].value);
-        }
-
-        if (user) {
-            const tokenExpiryDate = profile._json.exp ? new Date(profile._json.exp * 1000) : null;
-            await User.updateGoogleAuth(user.id, profile.id, accessToken, refreshToken || null, tokenExpiryDate);
-            const updatedUser = await User.getById(user.id); // ดึงข้อมูลผู้ใช้ที่อัปเดตแล้ว
-            return done(null, updatedUser);
-        } else {
-            const tokenExpiryDate = profile._json.exp ? new Date(profile._json.exp * 1000) : null;
-            const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
-            
-            // แยก company จาก email domain
-            const domain = email ? email.split('@')[1] : '';
-            const company = domain ? domain.split('.')[0] : 'unknown';
-            
-            const newUser = await User.createOAuthUser(
-                profile.displayName,
-                email,
-                profile.id,
-                accessToken,
-                refreshToken || null,
-                tokenExpiryDate,
-                null, null, null, null, // Microsoft fields - ส่งเป็น null
-                'google',
-                company // เพิ่ม company parameter
-            );
-            return done(null, newUser);
-        }
-    } catch (error) {
-        console.error('Google OAuth Error:', error);
-        return done(error, false);
-    }
-}));
-
-// ถ้าจะทำ Microsoft ในอนาคต
-// passport.use(new MicrosoftStrategy({ ... }));
-
-passport.serializeUser((user, done) => {
-    done(null, user.id);
-});
-
-passport.deserializeUser(async (id, done) => {
-    try {
-        const user = await User.getById(id);
-        done(null, user);
-    } catch (error) {
-        done(error, null);
-    }
-});
+    done(null, await User.getById(user.id));
+  } catch (error) { done(error); }
+};
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  passport.use(new GoogleStrategy({ clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET, callbackURL: process.env.GOOGLE_REDIRECT_URI,
+  }, verify('google')));
+}
+if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
+  passport.use(new MicrosoftStrategy({ clientID: process.env.MICROSOFT_CLIENT_ID,
+    clientSecret: process.env.MICROSOFT_CLIENT_SECRET, callbackURL: process.env.MICROSOFT_REDIRECT_URI,
+    tenant: process.env.MICROSOFT_TENANT || 'common',
+    scope: ['user.read'],
+  }, verify('microsoft')));
+}

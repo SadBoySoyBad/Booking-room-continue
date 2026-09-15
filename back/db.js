@@ -1,81 +1,51 @@
-// back/db.js - MongoDB connection via Mongoose
-require('dotenv').config();
+require('./config/env');
 const mongoose = require('mongoose');
-
-const mongoUri = process.env.MONGODB_URI;
-
-if (!mongoUri) {
-  console.error('[DB] Missing MONGODB_URI env. Please set it to your MongoDB Atlas connection string.');
-}
-
 mongoose.set('strictQuery', true);
-
-async function connectMongo() {
-  try {
-    console.log('[DB] Connecting to MongoDB...', { nodeEnv: process.env.NODE_ENV });
-    await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: Number(process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS) || 10000,
-    });
-    console.log('[DB] Connected to MongoDB Atlas');
-
-    // Seed default rooms if empty (Meeting 1-4) for fresh databases
-    try {
-      // ensure Room model is registered, then pull from mongoose.models
-      require('./models/Room');
-      const RoomModel = mongoose.models.Room;
-      const roomCount = await RoomModel.countDocuments();
-      if (roomCount === 0) {
-        await RoomModel.insertMany([
-          { name: 'Meeting 1', status: 'AVAILABLE' },
-          { name: 'Meeting 2', status: 'AVAILABLE' },
-          { name: 'Meeting 3', status: 'AVAILABLE' },
-          { name: 'Meeting 4', status: 'AVAILABLE' },
-        ]);
-        console.log('[DB] Seeded default rooms (Meeting 1-4)');
+mongoose.set('bufferCommands', false);
+mongoose.set('autoCreate', false);
+mongoose.set('autoIndex', false);
+// lean() skips virtuals and toJSON: normalize the API identifiers explicitly.
+mongoose.plugin((schema) => {
+  schema.post(['find', 'findOne', 'findOneAndUpdate'], function (result) {
+    if (!this.mongooseOptions().lean) return;
+    for (const row of Array.isArray(result) ? result : [result]) {
+      if (!row) continue;
+      if (row._id) row.id = String(row._id);
+      for (const field of ['room_id', 'user_id']) {
+        if (row[field] instanceof mongoose.Types.ObjectId) row[field] = String(row[field]);
       }
-    } catch (seedErr) {
-      console.warn('[DB] Seed rooms skipped:', seedErr.message);
+      delete row._id;
+      delete row.__v;
     }
-
-    // Ensure sparse unique indexes on optional OAuth ids (avoid duplicate null errors)
-    try {
-      require('./models/User');
-      const UserModel = mongoose.models.User;
-
-      // Force recreate indexes for google_id / microsoft_id to avoid duplicate null issues
-      const recreateIndex = async (field) => {
-        const name = `${field}_1`;
-        try {
-          await UserModel.collection.dropIndex(name);
-          console.log(`[DB] Dropped existing index ${name}`);
-        } catch (dropErr) {
-          if (dropErr.codeName !== 'IndexNotFound') {
-            console.warn(`[DB] Drop index ${name} skipped: ${dropErr.message}`);
-          }
-        }
-        await UserModel.collection.createIndex(
-          { [field]: 1 },
-          {
-            name,
-            unique: true,
-            sparse: true,
-            partialFilterExpression: { [field]: { $exists: true, $ne: null } },
-          }
-        );
-        console.log(`[DB] Created sparse unique index on ${field} with partialFilterExpression`);
-      };
-
-      await recreateIndex('google_id');
-      await recreateIndex('microsoft_id');
-    } catch (idxErr) {
-      console.warn('[DB] Index recreation skipped:', idxErr.message);
-    }
-  } catch (err) {
-    console.error('[DB] MongoDB connection error:', err.message);
-    process.exit(1);
+  });
+});
+let pending;
+mongoose.connection.on('disconnected', () => { pending = null; });
+mongoose.connectMongo = async () => {
+  if (mongoose.connection.readyState === 1) return mongoose;
+  if (!pending) {
+    if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required. See .env.example.');
+    pending = mongoose.connect(process.env.MONGODB_URI, {
+      dbName: process.env.MONGODB_DB || process.env.DB_NAME || 'booking',
+      serverSelectionTimeoutMS: Number(process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS) || 10000,
+      autoIndex: false,
+    }).catch((error) => { pending = null; throw error; });
   }
-}
-
-connectMongo();
-
+  return pending;
+};
+mongoose.initializeDatabase = async ({ indexes = true } = {}) => {
+  await mongoose.connectMongo();
+  require('./models/Room'); require('./models/User'); require('./models/Booking');
+  for (const model of Object.values(mongoose.models)) {
+    await model.createCollection();
+    if (indexes && process.env.NODE_ENV !== 'production') await model.createIndexes();
+  }
+  const Room = mongoose.models.Room;
+  if (await Room.countDocuments() === 0) {
+    await Room.bulkWrite([1, 2, 3, 4].map((n) => ({ updateOne: {
+      filter: { name: `Meeting ${n}` },
+      update: { $setOnInsert: { name: `Meeting ${n}`, status: 'AVAILABLE' } }, upsert: true,
+    } })));
+  }
+};
 module.exports = mongoose;

@@ -1,41 +1,93 @@
-# Backend on Vercel (Serverless)
+# Deploy the existing Vercel projects
 
-This repo is prepared to deploy the Node/Express backend to Vercel without using your own server.
+Verified projects in Potter's projects (`potters-projects-d4f2f738`):
 
-What changed
-- Express is split into `back/app.js` (no `listen`) and `back/server.js` (local dev only).
-- Sessions use `cookie-session` (stateless-friendly) instead of `express-session` store.
-- Vercel functions forward requests to Express via `back/api/index.js` and `back/api/[...all].js`.
+- `booking-room-continue`: root `front`, Nuxt frontend
+- `booking-room-continue-backend`: root `back`, Express API
+- Both connect to `SadBoySoyBad/Booking-room-continue`.
+- `booking-room-v1` and `booking-room-v1-tz3u` belong to the older repository.
 
-Deploy steps
-1) Create a new Vercel project
-   - Import this GitHub repo
-   - Root Directory: `back`
-   - Framework Preset: Other
-2) Environment Variables (Production + Preview)
-   - `NODE_ENV=production`
-   - Database (from your provider): `DB_HOST`, `DB_PORT=3306`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
-   - `DB_SSL=false` (set `true` only if provider requires TLS)
-   - `JWT_SECRET=<long random string>`
-   - `FRONTEND_URL=https://booking-room-continue.vercel.app`
-   - `CORS_ALLOWED_ORIGINS=https://booking-room-continue.vercel.app`
-   - `COOKIE_DOMAIN=` (leave empty unless using a parent domain for multiple subdomains)
-   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-   - `GOOGLE_REDIRECT_URI=https://<backend-vercel>.vercel.app/api/auth/google/callback`
-3) Deploy → Backend URL will be `https://<backend-vercel>.vercel.app`
-4) Update the frontend project (Nuxt on Vercel)
-   - `NUXT_PUBLIC_API_BASE_URL=https://<backend-vercel>.vercel.app/api`
-   - Redeploy frontend
-5) Google OAuth Console
-   - Authorized origins: `https://booking-room-continue.vercel.app`
-   - Redirect URI: `https://<backend-vercel>.vercel.app/api/auth/google/callback`
+The public frontend currently loads. The old backend returns FUNCTION_INVOCATION_FAILED. Runtime Logs supplied by the owner identify `querySrv ENOTFOUND _mongodb._tcp.booking.vs1tbkz.mongodb.net`, followed by process exit 1. Independent SRV checks against Cloudflare and Google public DNS both return NXDOMAIN. Local repairs have not been pushed or deployed.
 
-Local development
-- Run `npm install` in `back/`
-- `npm run dev` (nodemon) or `npm start` to test on `http://localhost:3001`
+## 0. Current Atlas connection
 
-Files to know
-- `back/app.js` — Express app
-- `back/server.js` — local server runner
-- `back/api/index.js`, `back/api/[...all].js` — Vercel entry points
+The owner has now created a new Booking cluster at `booking.7uebkhr.mongodb.net`. Credentials are saved only in ignored `back/.env`. Database `booking` was verified empty, then initialized with collections/indexes and four rooms. Real Atlas transaction/login/approval/history tests passed in a separate temporary database, which was removed afterward. The running local Docker backend now uses this cluster.
 
+For Vercel, use the database-specific URI from ignored `back/.env.vercel-database` and set `MONGODB_DB=booking`. The owner has now shown the `0.0.0.0/0` IP Access List entry as Active. This permits network access but does not itself verify credentials or environment values in Vercel. The backend environment changes are being applied through the dashboard and still need deployment verification. Do not upload the environment file to GitHub.
+
+The following notes describe the earlier investigation of the old hostname; the new cluster starts with new data.
+
+### Earlier cluster investigation
+
+Open the existing Atlas project and inspect the Booking cluster:
+
+- **Paused:** resume the existing cluster, wait until it is available, then retry DNS and backend readiness.
+- **Active:** use Connect → Drivers to compare the current hostname with `booking.vs1tbkz.mongodb.net`. Correct the backend project's `MONGODB_URI` if it contains an old hostname.
+- **Missing:** check the correct Atlas organization/project and available backups before creating any replacement. A new empty database does not restore existing bookings.
+
+Atlas documents missing SRV records for paused/deleted clusters in its [connection troubleshooting guide](https://www.mongodb.com/docs/atlas/troubleshoot-connection/). A DNS error alone does not prove which cluster state applies or that the password is wrong. Changing CORS or redeploying the same invalid hostname cannot repair it.
+
+After the connection is restored, configure the intended backend environment locally and run `npm run db:check` from `back`. It only checks DNS, connectivity and collection counts; it does not seed, modify indexes or print credentials. For Vercel environment changes, create a new deployment to apply them. Keep the existing database name unless a deliberate data migration is required.
+
+## 1. Backend project
+
+Use Node 22.x. Root Directory: `back`.
+`back/vercel.json` builds `app.js` as one Express function, routing all paths to it.
+The old `api/` forwarding files are compatibility wrappers; the explicit configuration routes requests directly to Express.
+
+Required Production and Preview environment:
+
+```dotenv
+NODE_ENV=production
+MONGODB_URI=<your Atlas URI>
+MONGODB_DB=booking
+JWT_SECRET=<your strong secret>
+FRONTEND_URL=https://booking-room-continue.vercel.app
+CORS_ALLOWED_ORIGINS=https://booking-room-continue.vercel.app
+GOOGLE_CLIENT_ID=<Google client id>
+GOOGLE_CLIENT_SECRET=<Google client secret>
+GOOGLE_REDIRECT_URI=https://booking-room-continue.vercel.app/api/auth/google/callback
+MICROSOFT_CLIENT_ID=<Microsoft application id, if enabled>
+MICROSOFT_CLIENT_SECRET=<Microsoft application secret, if enabled>
+MICROSOFT_REDIRECT_URI=https://booking-room-continue.vercel.app/api/auth/microsoft/callback
+GOOGLE_CALENDAR_ENABLED=false
+```
+
+Leave COOKIE_DOMAIN unset for the same-origin proxy. Add specific approved preview origins if needed; arbitrary `*.vercel.app` origins are not trusted.
+Atlas must permit the deployment's connection and use a database account with the required privileges. Mongo transactions require a replica set (Atlas provides this). Do not point these settings at the old MariaDB instance.
+
+Before switching production, run `npm run db:init` from `back` against the intended Mongo database using your normal environment configuration. This explicit maintenance command seeds rooms only when empty, removes optional null identifiers, removes the old unique display-name index, and creates the schema indexes. Back up the existing database first. Never run it against an uncertain database name.
+
+## 2. Frontend project
+
+Root Directory: `front`, framework: Nuxt, Node: 22.x.
+
+```dotenv
+NUXT_PUBLIC_API_BASE_URL=/api
+NUXT_BACKEND_URL=https://booking-room-continue-backend.vercel.app
+```
+
+`NUXT_BACKEND_URL` is server-only. Browsers call their own `/api`, and Nitro proxies to Express. This avoids relying on third-party cookies between two Vercel domains.
+
+Do not put JWT_SECRET or OAuth client secrets into NUXT_PUBLIC_* variables. The frontend no longer needs OAuth client secrets at all.
+
+## 3. Provider configuration
+
+Register the frontend-origin callback URLs shown above in Google Cloud / Microsoft Entra. OAuth starts and returns through the same frontend `/api` proxy so the state cookie is available on callback. The proxy must preserve redirects (`redirect: 'manual'`) and all Set-Cookie headers.
+
+For local development, register `http://localhost:3000/api/auth/google/callback` in the Google OAuth client's Authorized redirect URIs, and `http://localhost:3000/api/auth/microsoft/callback` as the appropriate web redirect URI in Entra. The current Google client returned `redirect_uri_mismatch` for the localhost URL during verification; Microsoft credentials are currently absent from the local environment. Do not change the layout or add a fake sign-in to work around provider configuration.
+
+To enable Google Calendar, enable the Google Calendar API, set GOOGLE_CALENDAR_ENABLED=true, and sign in again to grant the calendar.events scope. Calendar integration is optional; booking succeeds independently if the provider is unavailable. Email reminders use Google Calendar, not an SMTP worker.
+
+## 4. Verification after deployment
+
+1. Backend `/api/healthz`: 200.
+2. Backend `/api/readyz`: 200 with status ready (actually pings Mongo).
+3. Frontend `/api/rooms`: JSON with stable room IDs.
+4. Guest login, booking, confirmation, history and logout.
+5. Google/Microsoft login on the frontend origin; refresh the page and verify session persistence.
+6. Admin requests, approve/reject, account/room management, settings and analytics.
+7. Two overlapping concurrent bookings: one success and one 409 conflict.
+8. Confirm logs contain no unhandled exceptions.
+
+Frontend and backend should be deployed together because the API contract and authentication settings have changed. Do not reuse the old SQL deployment guides.

@@ -46,7 +46,7 @@
 
         <div class="col-span-1 lg:col-span-1 grid grid-cols-1 gap-4">
           <div class="bg-white p-4 rounded-lg shadow-md flex flex-col items-center justify-center">
-            <TotalEventsChart 
+            <TotalEventsChart
               :total-events="analyticsData.totalReservations"
               :events-by-role="analyticsData.eventsByRole"
               :loading="loadingAnalytics"
@@ -62,7 +62,7 @@
           </div>
         </div>
       </div>
-      
+
     </div>
   </div>
 </template>
@@ -78,7 +78,7 @@ const api = useApi();
 //   middleware: ['auth-admin'], // เพิ่ม middleware
 // });
 
-definePageMeta({ layout: 'admin-layout'}); 
+definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] });
 
 
 useHead({
@@ -106,7 +106,7 @@ const fetchAnalyticsData = async () => {
   errorAnalytics.value = null; // Reset error on new fetch
   try {
     // สมมติว่ามี Endpoint สำหรับดึงข้อมูล Analytics ทั้งหมด: /api/analytics/summary
-    const response = await api('/analytics/summary'); 
+    const response = await api('/analytics/summary');
     if (response) {
       analyticsData.value.totalReservations = response.totalReservations || 0; // ควรเป็น Number
       analyticsData.value.totalAttendance = response.totalAttendance || 0; // ควรเป็น Number

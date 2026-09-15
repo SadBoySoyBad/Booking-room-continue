@@ -11,7 +11,7 @@
         :style="{ height: (data.value / 100) * 100 + '%' }"
         />
         <span class="text-xs mt-1">{{ data.month }}</span>
-        
+
     </div>
   </div>
 </template>
@@ -40,7 +40,7 @@ const monthlyData = ref([
       <div
         class="w-8 rounded-t-sm transition-all duration-300"
         :class="{ 'bg-[#526AA8]': data.month === 'Jul', 'bg-gray-300': data.month !== 'Jul' }"
-        :style="{ height: (data.count / maxCount) * 100 + '%' }" 
+        :style="{ height: (data.count / maxCount) * 100 + '%' }"
       />
       <span class="text-xs mt-1">{{ data.month }}</span>
     </div>
@@ -103,6 +103,6 @@ const chartData = computed(() => {
 // คำนวณค่าสูงสุดเพื่อกำหนดความสูงของแท่งกราฟ
 const maxCount = computed(() => {
   if (chartData.value.length === 0) return 1; // ป้องกันการหารด้วยศูนย์
-  return Math.max(...chartData.value.map((d) => d.count));
+  return Math.max(1, ...chartData.value.map((d) => d.count));
 });
 </script>

@@ -18,10 +18,10 @@
           <div class="flex items-center justify-between">
             <label for="emailReminders" class="text-gray-700 text-base w-full flex-grow mr-4 flex items-center">
               Email me reminders
-              <input 
-                type="number" 
-                v-model="settings.reminderMinutes" 
-                id="reminderMinutes" 
+              <input
+                type="number"
+                v-model="settings.reminderMinutes"
+                id="reminderMinutes"
                 class="w-16 px-2 py-1 border border-gray-300 rounded-md text-center mx-2 text-sm"
                 min="0"
               >
@@ -65,7 +65,7 @@
 <script setup>
 import { ref } from 'vue';
 
-definePageMeta({ layout: 'admin-layout' });
+definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] });
 useHead({ title: "Settings Admin" });
 
 const settings = ref({
@@ -142,10 +142,10 @@ const settings = ref({
             <div class="flex items-center justify-between">
               <label for="emailReminders" class="text-gray-700 text-base w-full flex-grow mr-4 flex items-center">
                 Email me reminders
-                <input 
-                  type="number" 
-                  v-model="settings.reminderMinutes" 
-                  id="reminderMinutes" 
+                <input
+                  type="number"
+                  v-model="settings.reminderMinutes"
+                  id="reminderMinutes"
                   class="w-16 px-2 py-1 border border-gray-300 rounded-md text-center mx-2 text-sm"
                   min="0"
                   @change="saveSettings" @input="saveSettings" /> minutes before meetings.
@@ -193,7 +193,7 @@ import { useApi } from '~/composables/useApi';
 const api = useApi();
 
 // definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] }); // เพิ่ม middleware
-definePageMeta({ layout: 'admin-layout'}); 
+definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] });
 
 useHead({ title: "Settings Admin" });
 
@@ -214,7 +214,7 @@ const fetchSettings = async () => {
   errorSettings.value = null;
   try {
     // สมมติว่ามี Endpoint สำหรับดึง settings ของ user ที่ล็อกอินอยู่: /api/users/settings หรือ /api/settings/me
-    const response = await api('/users/settings'); 
+    const response = await api('/users/settings');
     if (response) {
       settings.value = {
         emailMeetingBooked: response.email_meeting_booked === 1, // แปลง tinyint(1) เป็น boolean

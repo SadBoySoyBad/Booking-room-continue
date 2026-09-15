@@ -106,9 +106,10 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, reactive, watch } from 'vue';
+import { reactive, watch } from 'vue';
 
 const props = defineProps({
+  requireEmail: { type: Boolean, default: true },
   visible: {
     type: Boolean,
     default: false
@@ -201,7 +202,7 @@ function close() {
 
 function submitForm() {
   if (props.type === 'admin') {
-    if (!form.name || !form.email) {
+    if (!form.name || (props.requireEmail && !form.email)) {
       alert('Please fill in Name and Email.');
       return;
     }

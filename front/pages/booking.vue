@@ -175,7 +175,7 @@ const calendarDays = computed(() => {
 
 const meetingsOnSelectedDate = computed(() => {
   return allMeetings.value.filter(meeting => {
-    return meeting.start_time?.startsWith(selectedDate.value)
+    return ['PENDING', 'APPROVED'].includes(meeting.status)
   })
 })
 
@@ -187,23 +187,13 @@ const isUserRelated = (booking) => {
 
   if (booking.user_id && booking.user_id === currentUserId) return true;
   if (booking.guest_email && booking.guest_email === currentUserEmail) return true;
-  if (booking.phone && booking.phone === currentUserPhone) return true;
+  if (booking.guest_phone && booking.guest_phone === currentUserPhone) return true;
 
   return false;
 };
 
-onMounted(async () => {
-  const res = await getBookingsByDate(selectedDate.value);
-  allMeetings.value = res || [];
-  myBookings.value = allMeetings.value.filter(isUserRelated);
-});
-
-
-
-
 async function selectDate(dateStr) {
   selectedDate.value = dateStr
-  await fetchBookingsByDate(dateStr)
 }
 
 function prevMonth() {
@@ -235,8 +225,8 @@ function getMeetingStyle(start_time, end_time) {
   const start = new Date(start_time)
   const end = new Date(end_time)
 
-  const localStart = new Date(start.getTime() + start.getTimezoneOffset() * 60000)
-  const localEnd = new Date(end.getTime() + end.getTimezoneOffset() * 60000)
+  const localStart = start
+  const localEnd = end
 
   const startH = localStart.getHours()
   const startM = localStart.getMinutes()
@@ -260,7 +250,7 @@ function formatTimeRange(start_time, end_time) {
   const end = new Date(end_time)
 
   const formatTime = (date) => {
-    const local = new Date(date.getTime() + date.getTimezoneOffset() * 60000)
+    const local = date
     return local.toTimeString().substring(0, 5)
   }
 
@@ -280,7 +270,7 @@ async function fetchBookingsByDate(date) {
     const response = await api(`/bookings/daily/${date}`, {
       method: 'GET',
     })
-    allMeetings.value = response
+    allMeetings.value = mapRoomNames(response || [])
     console.log("Fetched bookings for", date, ":", response)
   } catch (error) {
     console.error("Error fetching bookings:", error)
@@ -292,9 +282,22 @@ async function fetchAllRooms() {
   try {
     const response = await api('/rooms')
     allRooms.value = response
+    allMeetings.value = mapRoomNames(allMeetings.value)
   } catch (err) {
     console.error('Error fetching rooms:', err)
   }
+}
+
+function getRoomNameById(roomId) {
+  const r = allRooms.value.find((room) => String(room.id) === String(roomId) || String(room._id) === String(roomId))
+  return r ? r.name : null
+}
+
+function mapRoomNames(meetings = []) {
+  return meetings.map((m) => ({
+    ...m,
+    room_name: m.room_name || getRoomNameById(m.room_id) || m.room_id,
+  }))
 }
 
 onMounted(() => {
@@ -336,8 +339,8 @@ async function handleBookingSubmit(newBooking) {
     const bookingPayload = {
       room_id: newBooking.roomId,
       topic: newBooking.topic,
-      start_time: `${newBooking.date} ${newBooking.startTime}:00`,
-      end_time: `${newBooking.date} ${newBooking.endTime}:00`,
+      start_time: `${newBooking.date}T${newBooking.startTime}:00+07:00`,
+      end_time: `${newBooking.date}T${newBooking.endTime}:00+07:00`,
       guest_name: newBooking.guestName,
       guest_email: newBooking.guestEmail,
       guest_phone: newBooking.guestPhone,

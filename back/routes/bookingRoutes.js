@@ -13,7 +13,7 @@ router.get('/daily/:date', authMiddleware, bookingController.getByDate);
 
 router.get('/my-history', authMiddleware, bookingController.getByUserId);
 
-router.get('/guest-history', bookingController.getByGuestInfo);
+router.get('/guest-history', authMiddleware, bookingController.getByGuestInfo);
 router.put('/:id/status', authMiddleware, authorizeRoles(['admin']), bookingController.updateStatus);
 
 router.delete('/:id', authMiddleware, authorizeRoles(['admin']), bookingController.delete);

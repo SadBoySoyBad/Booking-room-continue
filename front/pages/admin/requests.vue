@@ -4,13 +4,13 @@
       <div class="flex justify-between items-center mb-4">
         <h2 class="text-2xl font-bold">Requests Lists</h2>
         <div class="flex space-x-2">
-          <button class="bg-gray-200 text-gray-800 px-4 py-2 rounded-full hover:bg-gray-300 transition-colors text-sm font-semibold">
+          <button @click="showFilter = true" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-full hover:bg-gray-300 transition-colors text-sm font-semibold">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
             Filter
           </button>
-          <button class="bg-gray-200 text-gray-800 px-4 py-2 rounded-full hover:bg-gray-300 transition-colors text-sm font-semibold">
+          <button @click="exportRows" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-full hover:bg-gray-300 transition-colors text-sm font-semibold">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
@@ -29,6 +29,7 @@
         <Pagination :current-page="currentPage" :total-pages="totalPages" @page-change="handlePageChange" />
       </div>
     </div>
+    <TableFilterPopup :visible="showFilter" :model-value="filterQuery" @apply="applyFilter" />
   </div>
 </template>
 
@@ -38,15 +39,22 @@ import { useApi } from '~/composables/useApi';
 import { usePendingRequestsCount } from '~/composables/usePendingRequestsCount'; // <--- เพิ่มตรงนี้
 
 const api = useApi();
+const showFilter = ref(false);
+const filterQuery = ref('');
+const downloadCsv = useCsvExport();
+const applyFilter = (query) => { filterQuery.value = query; showFilter.value = false; fetchRequests(1); };
+
 
 // definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] }); // เพิ่ม middleware
-definePageMeta({ layout: 'admin-layout'}); 
+definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] });
 
 useHead({ title: "Requests Admin" });
 
-import RequestsTable from '../../components/admin/RequestsTable.vue'; 
-import Pagination from '../../components/admin/Pagination.vue';     
+import RequestsTable from '../../components/admin/RequestsTable.vue';
+import Pagination from '../../components/admin/Pagination.vue';
 
+const filteredRows = ref([]);
+const exportRows = () => downloadCsv('requests.csv', filteredRows.value);
 const requestsData = ref([]);
 const loadingRequests = ref(true);
 const errorRequests = ref(null);
@@ -62,10 +70,14 @@ const fetchRequests = async (page = 1) => {
   errorRequests.value = null;
   try {
     const today = new Date().toISOString().split('T')[0];
-    const response = await api(`/bookings/daily/${today}?page=${page}`);
+    const all = await api('/bookings?status=PENDING');
+    const response = all.filter(row => [row.guest_name, row.guest_email, row.room_name, row.start_time].some(value => String(value || '').toLowerCase().includes(filterQuery.value.toLowerCase())));
+    filteredRows.value = response;
 
     if (response) {
-      requestsData.value = response.map(req => ({
+      totalPages.value = Math.max(1, Math.ceil(response.length / 10));
+      currentPage.value = Math.min(page, totalPages.value);
+      requestsData.value = response.slice((currentPage.value - 1) * 10, currentPage.value * 10).map(req => ({
         id: req.id,
         date: new Date(req.created_at).toLocaleDateString('th-TH'),
         name: req.guest_name,

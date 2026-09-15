@@ -44,6 +44,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close-letter-box']);
 
+const api = useApi();
 const notifications = ref([]);
 const loading = ref(false);
 
@@ -55,27 +56,7 @@ async function fetchNotifications() {
   }
   loading.value = true;
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('No token found. User not logged in.');
-    }
-
-    const response = await fetch('/api/bookings/notifications', { // เรียก Endpoint ที่สร้างใหม่
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      notifications.value = data;
-      console.log('Fetched notifications:', data);
-    } else if (response.status === 401 || response.status === 403) {
-      console.warn('Unauthorized to fetch notifications.');
-      notifications.value = [];
-    } else {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    notifications.value = await api('/bookings/notifications');
   } catch (error) {
     console.error('Error fetching notifications:', error);
     notifications.value = [];

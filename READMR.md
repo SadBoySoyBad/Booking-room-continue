@@ -1,6 +1,8 @@
+> See the repository-root README.md and ARCHITECTURE.md for current setup and architecture. The text below is historical.
+
 # 🏢 Booking Room System
 
-ระบบจองห้องประชุมพร้อม Login ด้วย Google OAuth 2.0, SSL (HTTPS), และ Docker Compose  
+ระบบจองห้องประชุมพร้อม Login ด้วย Google OAuth 2.0, SSL (HTTPS), และ Docker Compose
 Deploy บน Rukcom Cloud ได้ทันที ✅
 
 ---

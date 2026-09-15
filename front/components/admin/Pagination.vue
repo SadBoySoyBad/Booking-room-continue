@@ -50,11 +50,11 @@ const props = defineProps({
   // สามารถเพิ่ม prop สำหรับจำนวนปุ่มที่แสดง เช่น visibleButtons: 5
 });
 
-const emit = defineEmits(['page-changed']);
+const emit = defineEmits(['page-change']);
 
 const goToPage = (page) => {
   if (page >= 1 && page <= props.totalPages) {
-    emit('page-changed', page);
+    emit('page-change', page);
   }
 };
 

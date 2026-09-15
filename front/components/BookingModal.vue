@@ -41,7 +41,7 @@
             >
               {{ d }}
             </div>
-            
+
               <div
                 v-for="(day, idx) in calendarDays"
                 :key="idx"
@@ -62,7 +62,7 @@
               >
                 {{ day.day || '' }}
               </div>
-            
+
           </div>
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 mt-3 text-sm">
             <label class="font-medium text-gray-700 whitespace-nowrap">Time :</label>
@@ -126,7 +126,7 @@
               v-model="form.guestEmail"
               type="email"
               inputmode="email"
-              pattern="^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+              pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
               class="border px-3 py-1 rounded-md flex-grow w-full"
               placeholder="example@email.com"
             >
@@ -140,7 +140,7 @@
               pattern="[0-9]*"
               class="border px-3 py-1 rounded-md flex-grow w-full"
               placeholder="000-000-0000"
-              @input="guest.phone = guest.phone.replace(/\D/g, '')"
+              @input="form.guestPhone = form.guestPhone.replace(/\D/g, '')"
             >
           </div>
           <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2">
@@ -161,9 +161,9 @@
                 :class="[
                   'px-3 py-1 rounded-full border text-xs font-semibold active:bg-red-100 active:scale-95 transition-all duration-150 cursor-pointer ',
                   form.roomId === roomOpt.id ? 'bg-red-500 text-white' : 'text-gray-700 hover:bg-gray-100',
-                  roomOpt.display_status === 'OCCUPIED' || roomOpt.status === 'MAINTENANCE' ? 'opacity-50 cursor-not-allowed' : ''
+                  roomOpt.status === 'MAINTENANCE' ? 'opacity-50 cursor-not-allowed' : ''
                 ]"
-                :disabled="roomOpt.display_status === 'OCCUPIED' || roomOpt.status === 'MAINTENANCE'"
+                :disabled="roomOpt.status === 'MAINTENANCE'"
                 @click="selectRoom(roomOpt)"
               >
                 {{ roomOpt.name }}
@@ -185,7 +185,7 @@
               v-model="form.participantsEmails[i]"
               type="email"
               inputmode="email"
-              pattern="^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+              pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
               class="border px-3 py-1 rounded-md flex-grow min-w-0"
               placeholder="example@email.com"
             >
@@ -332,7 +332,7 @@ const selectDate = (date) => {
 }
 
 const selectRoom = (roomOpt) => {
-  if (!roomOpt || roomOpt.display_status === 'OCCUPIED' || roomOpt.status === 'MAINTENANCE') return;
+  if (!roomOpt || roomOpt.status === 'MAINTENANCE') return;
   form.value.roomId = roomOpt.id;
 };
 
@@ -352,8 +352,8 @@ const form = ref({
 
 watch(() => props.visible, async (val) => {
   if (val) {
-    form.value.date = props.selectedDate || new Date().toISOString().split('T')[0];
-    
+    form.value.date = props.selectedDate || new Date().toLocaleDateString('en-CA');
+
     const dateToDisplay = new Date(form.value.date);
     currentMonth.value = dateToDisplay.getMonth();
     currentYear.value = dateToDisplay.getFullYear();
@@ -362,14 +362,14 @@ watch(() => props.visible, async (val) => {
     form.value.guestEmail = props.currentUserEmail || '';
     form.value.guestPhone = props.currentUserPhone || '';
     form.value.guestCompany = props.currentUserCompany || '';
-    
+
     form.value.topic = '';
     form.value.roomId = null;
     form.value.startTime = '';
     form.value.endTime = '';
     form.value.requirements = [];
     form.value.participantsEmails = [''];
-    
+
     await fetchRooms();
   }
 }, { immediate: true });

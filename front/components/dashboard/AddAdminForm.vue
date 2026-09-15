@@ -29,10 +29,13 @@ import AdminPopup from "../AdminPopup.vue";
 
 const showAddAdminModal = ref(false);
 
-const handleAddAdmin = (formData) => {
-  alert("Admin Added: " + JSON.stringify(formData));
-  console.log("Admin Data:", formData);
-  showAddAdminModal.value = false;
+const api = useApi();
+const handleAddAdmin = async (formData) => {
+  try {
+    await api('/users', { method: 'POST', body: { username: formData.name, email: formData.email, phone: formData.phone || undefined, role: 'admin' } });
+    alert('Admin added. Sign in with the registered Google or Microsoft email.');
+    showAddAdminModal.value = false;
+  } catch (error) { alert(error.message); }
 };
 </script>
 

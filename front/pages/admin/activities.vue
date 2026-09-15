@@ -17,13 +17,13 @@
 <script setup>
 import { ref } from 'vue';
 
-definePageMeta({ layout: 'admin-layout' });
+definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] });
 useHead({ title: "Activities Admin" });
 
 // Import existing components
 // ตรวจสอบ path อีกครั้งว่าถูกต้องตามที่คุณมี: ../../components/dashboard/ หรือ ../../components/admin/
-import ActivityLogTable from '../../components/dashboard/ActivityLogTable.vue'; 
-import Pagination from '../../components/admin/Pagination.vue';     
+import ActivityLogTable from '../../components/dashboard/ActivityLogTable.vue';
+import Pagination from '../../components/admin/Pagination.vue';
 
 // Mock data for the activity log table (คุณสามารถนำข้อมูลจริงมาแทนที่ได้)
 const activityLogData = ref([
@@ -69,12 +69,12 @@ import { useApi } from '~/composables/useApi';
 const api = useApi();
 
 // definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] }); // เพิ่ม middleware
-definePageMeta({ layout: 'admin-layout'}); 
+definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] });
 
 useHead({ title: "Activities Admin" });
 
 import ActivityLogTable from '../../components/dashboard/ActivityLogTable.vue'; // ตรวจสอบ path อีกครั้ง
-import Pagination from '../../components/admin/Pagination.vue';     
+import Pagination from '../../components/admin/Pagination.vue';
 
 const activityLogData = ref([]);
 const loadingActivities = ref(true);
@@ -91,16 +91,18 @@ const fetchActivities = async (page = 1) => {
     // ถ้ายังไม่มี Backend เฉพาะ อาจใช้ /bookings?page=... แล้วมา map เอง
     const response = await api(`/bookings?page=${page}`); // ใช้ /bookings เป็นตัวอย่าง
     if (response) {
-      activityLogData.value = response.map(booking => ({
+      totalPages.value = Math.max(1, Math.ceil(response.length / 10));
+      currentPage.value = Math.min(page, totalPages.value);
+      activityLogData.value = response.slice((currentPage.value - 1) * 10, currentPage.value * 10).map(booking => ({
         date: new Date(booking.created_at).toLocaleDateString('th-TH'),
         time: new Date(booking.created_at).toLocaleTimeString('th-TH'),
         name: booking.guest_name, // หรือชื่อผู้ใช้จริงถ้าผูก user_id ได้
-        role: booking.user_id ? 'Employee' : 'Guest',
+        role: booking.user_role || 'guest',
         action: booking.status, // หรือ map เป็น Reserved, Approved, Canceled, etc.
         actionType: booking.status.toLowerCase(),
         topic: booking.topic,
         room: booking.room_name
-      })).sort((a,b) => new Date(b.date + ' ' + b.time) - new Date(a.date + ' ' + a.time)); // เรียงตามเวลาล่าสุด
+      })); // เรียงตามเวลาล่าสุด
       // totalPages.value = response.totalPages; // ถ้า Backend ส่งมา
       // currentPage.value = response.currentPage; // ถ้า Backend ส่งมา
       console.log('Fetched activities:', activityLogData.value);

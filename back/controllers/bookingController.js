@@ -1,3 +1,5 @@
+const { errorResponse, publicUser } = require('../utils/http');
+const { isTimezoneDateTime } = require('../utils/dates');
 const Booking = require("../models/Booking");
 const Room = require("../models/Room");
 const User = require("../models/User"); // เพิ่ม User model สำหรับดึง info
@@ -15,11 +17,12 @@ const bookingController = {
       guest_email, // เปลี่ยนจาก guestEmail
       guest_phone, // เปลี่ยนจาก guestPhone
       guest_company, // เปลี่ยนจาก guestCompany
-      participantsEmails,
+      participants_emails,
+      participantsEmails = participants_emails,
       requirements,
     } = req.body;
     const userId = req.user ? req.user.id : null; // ดึง userId จาก JWT payload ถ้ามี
-    console.log('User ID received in createBooking:', userId); // <--- เพิ่มบรรทัดนี้
+
 
     // แก้ไขการตรวจสอบ validation ให้ใช้ชื่อตัวแปรที่ถูกต้อง
     if (
@@ -35,6 +38,14 @@ const bookingController = {
         .json({ message: "Missing required booking fields." });
     }
 
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (![topic, guest_name, guest_email].every(v => typeof v === 'string' && v.trim()) ||
+        !emailPattern.test(guest_email) ||
+        ![start_time, end_time].every(isTimezoneDateTime) ||
+        (participantsEmails !== undefined && (!Array.isArray(participantsEmails) || !participantsEmails.every(v => typeof v === 'string' && emailPattern.test(v)))) ||
+        (requirements !== undefined && (!Array.isArray(requirements) || !requirements.every(v => typeof v === 'string')))) {
+      return res.status(400).json({ message: 'Invalid booking fields, email, or timezone-aware date/time.' });
+    }
     if (new Date(start_time) >= new Date(end_time)) {
       return res
         .status(400)
@@ -87,9 +98,9 @@ const bookingController = {
       );
 
       // Calendar Integration (Google Calendar)
-      if (userId) {
+      if (userId && process.env.GOOGLE_CALENDAR_ENABLED === 'true') {
         const currentUser = await User.getById(userId);
-        if (currentUser && currentUser.last_login_provider === "google") {
+        if (currentUser && currentUser.last_login_provider === "google" && currentUser.settings?.auto_add_calendar !== 0) {
           try {
             await calendarService.createGoogleCalendarEvent(currentUser.id, {
               ...newBooking,
@@ -114,9 +125,7 @@ const bookingController = {
         });
     } catch (error) {
       console.error("Error in createBooking:", error);
-      res
-        .status(500)
-        .json({ message: "Internal Server Error", error: error.message });
+      return errorResponse(res, error);
     }
   },
 
@@ -126,7 +135,7 @@ const bookingController = {
   //   //   res.status(200).json(bookings);
   //   // } catch (error) {
   //   //   console.error("Error in getAll:", error);
-  //   //   res.status(500).json({ message: "Internal Server Error" });
+  //   //   return errorResponse(res, error);
   //   // }
   //   const { status } = req.query; // ดึง status จาก query parameter
   //       let bookings;
@@ -140,7 +149,7 @@ const bookingController = {
   //       res.status(200).json(bookings);
   //   } catch (error) {
   //       console.error("Error in getAll:", error);
-  //       res.status(500).json({ message: "Internal Server Error" });
+  //       return errorResponse(res, error);
   //   }
   // },
 
@@ -157,7 +166,7 @@ const bookingController = {
       res.status(200).json(bookings);
     } catch (error) {
       console.error("Error in getAll:", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      return errorResponse(res, error);
     }
   },
 
@@ -174,9 +183,7 @@ const bookingController = {
 
       const filteredBookings = bookings.map((booking) => {
         const isOwner =
-          booking.user_id === currentUserId ||
-          booking.guest_email === currentUserEmail ||
-          booking.guest_phone === currentUserPhone;
+          req.user.role === 'admin' || (booking.user_id && booking.user_id === currentUserId);
 
         if (isOwner) {
           return booking; // แสดงข้อมูลเต็มของตัวเอง
@@ -195,20 +202,20 @@ const bookingController = {
       res.status(200).json(filteredBookings);
     } catch (error) {
       console.error("Error in getByDate:", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      return errorResponse(res, error);
     }
   },
 
 
   getByUserId: async (req, res) => {
     try {
-      console.log('User ID from token (req.user.id):', req.user.id); // <-- เพิ่มบรรทัดนี้
+
       const bookings = await Booking.getByUserId(req.user.id);
-      console.log('Bookings found by Backend:', bookings); // <-- เพิ่มบรรทัดนี้
+
       res.status(200).json(bookings);
     } catch (error) {
       console.error("Error in getByUserId:", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      return errorResponse(res, error);
     }
   },
 
@@ -218,11 +225,11 @@ const bookingController = {
       return res.status(400).json({ message: "Email and phone are required." });
     }
     try {
-      const bookings = await Booking.getByGuestInfo(email, phone);
+      const bookings = await Booking.getByUserId(req.user.id);
       res.status(200).json(bookings);
     } catch (error) {
       console.error("Error in getByGuestInfo:", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      return errorResponse(res, error);
     }
   },
 
@@ -235,13 +242,17 @@ const bookingController = {
     try {
       const isUpdated = await Booking.updateStatus(id, status);
       if (isUpdated) {
+        if (process.env.GOOGLE_CALENDAR_ENABLED === 'true') {
+          try { await calendarService.syncGoogleCalendarStatus(await Booking.getById(id)); }
+          catch (error) { console.warn('Calendar status sync failed:', error.message); }
+        }
         res.status(200).json({ message: 'Booking status updated successfully.' });
       } else {
         res.status(404).json({ message: 'Booking not found.' });
       }
     } catch (error) {
       console.error("Error in updateStatus:", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      return errorResponse(res, error);
     }
   },
 
@@ -256,7 +267,7 @@ const bookingController = {
       }
     } catch (error) {
       console.error("Error in delete:", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      return errorResponse(res, error);
     }
   },
 
@@ -266,7 +277,7 @@ const bookingController = {
       res.status(200).json(notifications);
     } catch (error) {
       console.error("Error in getNotificationsByUserId:", error);
-      res.status(500).json({ message: "Internal Server Error" });
+      return errorResponse(res, error);
     }
   }
 };

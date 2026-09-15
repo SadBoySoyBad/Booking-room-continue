@@ -28,19 +28,19 @@ const Analytics = {
   getLeaderboardReservations: async (limit = 5) => {
     const BookingModel = getBookingModel();
     const rows = await BookingModel.aggregate([
-      { $match: { guest_company: { $ne: null, $ne: '' } } },
+      { $match: { guest_company: { $nin: [null, ''] } } },
       { $group: { _id: '$guest_company', reservations: { $sum: 1 } } },
       { $sort: { reservations: -1 } },
       { $limit: limit },
-      { $project: { company: '$_id', reservations: 1, _id: 0 } },
+      { $project: { company: '$_id', reservations: 1, totalEvents: '$reservations', district: { $literal: '—' }, total: '$reservations', _id: 0 } },
     ]);
     return rows;
   },
 
   getMonthlyBookingCounts: async (year = new Date().getFullYear()) => {
     const BookingModel = getBookingModel();
-    const start = new Date(`${year}-01-01T00:00:00.000Z`);
-    const end = new Date(`${year + 1}-01-01T00:00:00.000Z`);
+    const start = new Date(`${year}-01-01T00:00:00+07:00`);
+    const end = new Date(`${year + 1}-01-01T00:00:00+07:00`);
     const rows = await BookingModel.aggregate([
       {
         $match: {
@@ -50,7 +50,7 @@ const Analytics = {
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m', date: '$start_time' } },
+          _id: { $dateToString: { format: '%Y-%m', date: '$start_time', timezone: 'Asia/Bangkok' } },
           count: { $sum: 1 },
         },
       },

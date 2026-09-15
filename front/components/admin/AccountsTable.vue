@@ -51,11 +51,18 @@
       </tbody>
     </table>
     <div v-if="accountsData.length === 0" class="text-center text-gray-500 py-4">No accounts found for this role.</div>
+    <AdminPopup type="admin" title="Edit Account" confirm-button-text="Save"
+      :require-email="editingAccount?.role !== 'guest'" :visible="!!editingAccount" :initial-data="editingAccount"
+      @close="editingAccount = null" @submit="saveAccount" />
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
+import AdminPopup from '../AdminPopup.vue';
+const api = useApi();
+const emit = defineEmits(['updated']);
+const editingAccount = ref(null);
 
 const props = defineProps({
   accountsData: {
@@ -74,16 +81,19 @@ const toggleActionsDropdown = (index) => {
   }
 };
 
-const editAccount = (account) => {
-  alert(`Editing account: ${account.name} (${account.email})`);
-  // Emit an event to parent or navigate to edit page
+const editAccount = (account) => { editingAccount.value = { ...account }; };
+const saveAccount = async (data) => {
+  try {
+    const id = editingAccount.value?.id;
+    await api(`/users/${id}`, { method: 'PUT', body: { username: data.name, email: data.email, phone: data.phone === 'N/A' ? undefined : data.phone } });
+    editingAccount.value = null;
+    emit('updated');
+  } catch (error) { alert(error.message); }
 };
-
-const deleteAccount = (account) => {
-  if (confirm(`Are you sure you want to delete ${account.name}?`)) {
-    alert(`Deleting account: ${account.name} (${account.email})`);
-    // Emit an event to parent to remove account from data
-  }
+const deleteAccount = async (account) => {
+  if (!confirm(`Are you sure you want to delete ${account.name}?`)) return;
+  try { await api(`/users/${account.id}`, { method: 'DELETE' }); emit('updated'); }
+  catch (error) { alert(error.message); }
 };
 </script>
 

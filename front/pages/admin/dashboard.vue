@@ -4,7 +4,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
 
         <div class="col-span-1 lg:col-span-2 grid grid-cols-1 gap-4">
-          
+
           <div class="bg-white p-4 rounded-lg shadow-md">
             <h3 class="text-lg font-bold mb-4 text-center">Meeting Status</h3>
             <div class="grid grid-cols-2 gap-4">
@@ -124,11 +124,11 @@ import { useApi } from '~/composables/useApi'; // Import useApi
 const api = useApi(); // Initialize useApi
 
 // definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] }); // เพิ่ม middleware
-definePageMeta({ layout: 'admin-layout'}); 
+definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] });
 
 
 // Components ที่ใช้ในหน้านี้ - ตรวจสอบ path ให้ถูกต้อง: '../../' เพราะอยู่ลึก 2 ชั้น (pages/admin/dashboard.vue)
-import RoomStatusCard from "../../components/dashboard/RoomStatusCard.vue"; 
+import RoomStatusCard from "../../components/dashboard/RoomStatusCard.vue";
 import MonthlyAttendanceGraph from "../../components/dashboard/MonthlyAttendanceGraph.vue";
 import ClockWidget from "../../components/dashboard/ClockWidget.vue";
 import TotalEventsChart from "../../components/dashboard/TotalEventsChart.vue";
@@ -137,7 +137,7 @@ import StatisticTable from "../../components/dashboard/StatisticTable.vue";
 
 // Components ที่ใช้ใน modals
 import RequestsApprovalTable from "../../components/dashboard/RequestsApprovalTable.vue";
-import ActivityLogTable from "../../components/dashboard/ActivityLogTable.vue"; 
+import ActivityLogTable from "../../components/dashboard/ActivityLogTable.vue";
 
 import AdminPopup from "~/components/AdminPopup.vue";
 
@@ -223,15 +223,15 @@ const fetchRecentActivities = async () => {
     const response = await api('/bookings'); // Adjust this endpoint to your actual activity log API
     if (response) {
       // Map bookings to activity log format
-      activityLogData.value = response.map(booking => ({
+      activityLogData.value = response.slice().sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at)).map(booking => ({
         time: new Date(booking.created_at).toLocaleTimeString('th-TH'),
         name: booking.guest_name,
-        role: booking.user_id ? 'Employee' : 'Guest', // Differentiate based on user_id presence
+        role: booking.user_role || 'guest', // Differentiate based on user_id presence
         action: booking.status === 'APPROVED' ? 'Approved' : 'Reserved', // Simplified action type
         actionType: booking.status === 'APPROVED' ? 'approved' : 'reserved', // For styling/icon
         topic: booking.topic, // Add topic for better context in log
         room: booking.room_name // Add room name
-      })).sort((a,b) => new Date(b.time) - new Date(a.time)); // Sort by time, newest first
+      })); // Sort by time, newest first
       console.log('Fetched recent activities:', activityLogData.value);
     }
   } catch (error) {
@@ -280,7 +280,7 @@ const handleUpdateRequests = async ({ action, id }) => {
       console.log(response.message);
       // Re-fetch all relevant data after an update
       await fetchPendingRequests();
-      await fetchRecentActivities(); 
+      await fetchRecentActivities();
       await fetchRoomStatuses();
       await fetchAnalyticsData(); // Re-fetch analytics data as counts might change
     }

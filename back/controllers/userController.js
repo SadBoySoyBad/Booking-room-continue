@@ -1,66 +1,4 @@
-// // back/controllers/userController.js
-// const User = require('../models/User'); // Import User model
-
-// const userController = {
-//     // ฟังก์ชันสำหรับดึงผู้ใช้ทั้งหมด (อาจกรองตาม role และ pagination)
-//     getAllUsers: async (req, res) => {
-//         try {
-//             const { role, page = 1, limit = 10 } = req.query;
-//             const users = await User.getAll(role, page, limit); // เรียกจาก User model
-//             res.status(200).json(users);
-//         } catch (error) {
-//             console.error("Error in getAllUsers:", error);
-//             res.status(500).json({ message: "Internal Server Error" });
-//         }
-//     },
-//     // ฟังก์ชันสำหรับดึงผู้ใช้ตาม ID
-//     getUserById: async (req, res) => {
-//         try {
-//             const user = await User.getById(req.params.id);
-//             if (user) {
-//                 res.status(200).json(user);
-//             } else {
-//                 res.status(404).json({ message: "User not found" });
-//             }
-//         } catch (error) {
-//             console.error("Error in getUserById:", error);
-//             res.status(500).json({ message: "Internal Server Error" });
-//         }
-//     },
-//     // (เพิ่ม) ฟังก์ชันสำหรับอัปเดตข้อมูลผู้ใช้ (เช่น เปลี่ยน role)
-//     updateUser: async (req, res) => {
-//         const { id } = req.params;
-//         const { username, email, role, phone, company } = req.body; // รับฟิลด์ที่ต้องการอัปเดต
-//         try {
-//             const isUpdated = await User.update(id, { username, email, role, phone, company }); // สมมติว่ามี User.update
-//             if (isUpdated) {
-//                 res.status(200).json({ message: 'User updated successfully' });
-//             } else {
-//                 res.status(404).json({ message: 'User not found or no changes made' });
-//             }
-//         } catch (error) {
-//             console.error("Error in updateUser:", error);
-//             res.status(500).json({ message: "Internal Server Error" });
-//         }
-//     },
-//     // (เพิ่ม) ฟังก์ชันสำหรับลบผู้ใช้
-//     deleteUser: async (req, res) => {
-//         try {
-//             const isDeleted = await User.delete(req.params.id); // สมมติว่ามี User.delete
-//             if (isDeleted) {
-//                 res.status(200).json({ message: 'User deleted successfully' });
-//             } else {
-//                 res.status(404).json({ message: 'User not found' });
-//             }
-//         } catch (error) {
-//             console.error("Error in deleteUser:", error);
-//             res.status(500).json({ message: "Internal Server Error" });
-//         }
-//     },
-// };
-
-// module.exports = userController;
-// back/controllers/userController.js
+const { errorResponse, publicUser } = require('../utils/http');
 const User = require('../models/User'); // Import User model
 const bcrypt = require("bcryptjs"); // สำหรับ hash รหัสผ่านหากมีการสร้าง/อัปเดตผู้ใช้แบบ Local Login
 
@@ -69,11 +7,17 @@ const userController = {
     getAllUsers: async (req, res) => {
         try {
             const { role, page = 1, limit = 10 } = req.query; // รับ role, page, limit จาก query parameter
-            const users = await User.getAll(role, parseInt(page), parseInt(limit)); // เรียกจาก User model
+            const pageNumber = Number(page), pageSize = Number(limit);
+            if (!Number.isInteger(pageNumber) || pageNumber < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) return res.status(400).json({ message: 'Invalid pagination.' });
+            const users = await User.getAll(role, pageNumber, pageSize, req.query.q); // เรียกจาก User model
+            if (req.query.paginate === 'true') {
+              const count = await require('../db').models.User.countDocuments(User.filter(role, req.query.q));
+              return res.json({ users, totalPages: Math.max(1, Math.ceil(count / pageSize)), currentPage: pageNumber });
+            }
             res.status(200).json(users);
         } catch (error) {
             console.error("Error in getAllUsers:", error);
-            res.status(500).json({ message: "Internal Server Error", error: error.message });
+            return errorResponse(res, error);
         }
     },
 
@@ -83,23 +27,23 @@ const userController = {
             const user = await User.getById(req.params.id); // เรียกจาก User model
             if (user) {
                 // ไม่ควรส่ง password hash กลับไปยัง frontend
-                const { password, ...userWithoutPassword } = user; 
-                res.status(200).json(userWithoutPassword);
+                const { password, ...userWithoutPassword } = user;
+                res.status(200).json(publicUser(userWithoutPassword));
             } else {
                 res.status(404).json({ message: 'User not found' });
             }
         } catch (error) {
             console.error("Error in getUserById:", error);
-            res.status(500).json({ message: "Internal Server Error", error: error.message });
+            return errorResponse(res, error);
         }
     },
 
     // ฟังก์ชันสำหรับสร้างผู้ใช้ใหม่ (สำหรับ Admin หรือการสมัครสมาชิก Local Login)
     createUser: async (req, res) => {
         const { username, email, password, role = 'employee', phone, company } = req.body;
-        
-        if (!username || !email || !password) {
-            return res.status(400).json({ message: 'Username, email, and password are required.' });
+
+        if (typeof username !== 'string' || !username.trim() || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (password != null && typeof password !== 'string')) {
+            return res.status(400).json({ message: 'Username and email are required.' });
         }
 
         try {
@@ -109,10 +53,10 @@ const userController = {
             }
 
             const newUser = await User.create(username, email, password, role, phone, company); // เรียกจาก User model
-            res.status(201).json({ message: 'User created successfully', user: newUser });
+            res.status(201).json({ message: 'User created successfully', user: publicUser(newUser) });
         } catch (error) {
             console.error("Error in createUser:", error);
-            res.status(500).json({ message: "Internal Server Error", error: error.message });
+            return errorResponse(res, error);
         }
     },
 
@@ -121,6 +65,8 @@ const userController = {
         const { id } = req.params;
         const { username, email, password, role, phone, company } = req.body; // รับฟิลด์ที่ต้องการอัปเดต
         const updateData = {};
+        if ([username, email, password, phone, company].some(value => value != null && typeof value !== 'string')) return res.status(400).json({ message: 'Invalid user fields.' });
+        if (role !== undefined && !['guest', 'employee', 'admin'].includes(role)) return res.status(400).json({ message: 'Invalid role.' });
 
         if (username !== undefined) updateData.username = username;
         if (email !== undefined) updateData.email = email;
@@ -146,13 +92,14 @@ const userController = {
             }
         } catch (error) {
             console.error("Error in updateUser:", error);
-            res.status(500).json({ message: "Internal Server Error", error: error.message });
+            return errorResponse(res, error);
         }
     },
 
     // ฟังก์ชันสำหรับลบผู้ใช้ (สำหรับ Admin)
     deleteUser: async (req, res) => {
         try {
+            if (req.params.id === req.user.id) return res.status(409).json({ message: 'You cannot delete your own admin account.' });
             const isDeleted = await User.delete(req.params.id); // สมมติว่ามี User.delete ใน models/User.js (คุณต้องเพิ่มเอง)
             if (isDeleted) {
                 res.status(200).json({ message: 'User deleted successfully.' });
@@ -161,7 +108,7 @@ const userController = {
             }
         } catch (error) {
             console.error("Error in deleteUser:", error);
-            res.status(500).json({ message: "Internal Server Error", error: error.message });
+            return errorResponse(res, error);
         }
     },
 };

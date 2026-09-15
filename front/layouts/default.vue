@@ -27,6 +27,7 @@
 
           <LetterBoxPopup
             :is-visible="isLetterBoxPopupVisible"
+            :is-logged-in="isLoggedIn"
             @close-letter-box="isLetterBoxPopupVisible = false"
           />
         </div>

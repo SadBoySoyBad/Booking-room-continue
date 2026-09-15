@@ -17,3 +17,14 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 
+
+.env.*
+!.env.example
+!**/.env.example
+front/.data/
+artifacts/
+
+.tools/
+*-results.json
+.playwright-mcp/
+.vercel/

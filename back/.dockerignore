@@ -1,13 +1,10 @@
-# ❌ ไม่ ignore .env เพราะเจ้านายต้องใช้มันใน production
-# .env
-
-# Build & cache
 node_modules/
-dist/
+.nuxt/
+.output/
+.nitro/
+.env
+.env.*
 *.log
-
-# Editor/OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+.git/
+test/
+.vercel/

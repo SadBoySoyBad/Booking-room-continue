@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-h-screen bg-[#E3E9FF]"> 
+  <div class="flex min-h-screen bg-[#E3E9FF]">
 
     <aside
       id="admin-sidebar"  :class="[
@@ -33,8 +33,8 @@
           <li class="mb-2">
             <NuxtLink
               to="/admin/dashboard"
-              class="flex items-center p-2 rounded-lg transition-colors hover:bg-[#526AA8]" 
-              active-class="bg-[#526AA8] text-[#FFFFFF] border-l-4 border-[#526AA8] font-semibold -ml-4 pl-4 py-2" 
+              class="flex items-center p-2 rounded-lg transition-colors hover:bg-[#526AA8]"
+              active-class="bg-[#526AA8] text-[#FFFFFF] border-l-4 border-[#526AA8] font-semibold -ml-4 pl-4 py-2"
               style="margin-left: -1rem; padding-left: 1rem;"
             >
               <svg
@@ -106,7 +106,7 @@
               </svg>
               Requests
               <span
-                v-if="pendingRequestsCount > 0" 
+                v-if="pendingRequestsCount > 0"
                 class="ml-auto bg-[#D2758D] text-white text-xs font-semibold px-2 py-0.5 rounded-full" >
                 {{ pendingRequestsCount }}
               </span>
@@ -143,7 +143,7 @@
           </li>
           <li class="mb-2">
             <NuxtLink
-              to="/admin/manage-rooms" 
+              to="/admin/manage-rooms"
               class="flex items-center p-2 rounded-lg transition-colors hover:bg-[#526AA8]"
               active-class="bg-[#526AA8] text-[#FFFFFF] border-l-4 border-[#526AA8] font-semibold -ml-4 pl-4 py-2"
               style="margin-left: -1rem; padding-left: 1rem;"
@@ -182,7 +182,7 @@
                   d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                 />
               </svg>
-              Activities 
+              Activities
             </NuxtLink>
           </li>
           <li class="mb-2">
@@ -252,7 +252,7 @@
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 sm:h-5 sm:w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-              Admin01
+              {{ adminUser?.username || 'Admin' }}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 class="h-4 w-4 ml-1 transition-transform duration-200"
@@ -267,7 +267,7 @@
             </span>
 
             <div v-if="isAdminDropdownOpen" class="absolute top-full right-0 mt-2 w-32 bg-[#FFFFFF] rounded-md shadow-lg z-10 overflow-hidden">
-              <NuxtLink to="/admin/history" class="block w-full text-left px-4 py-2 text-[#526AA8]  hover:text-[#3C3F9D]" @click="isAdminDropdownOpen = false"> History
+              <NuxtLink to="/history" class="block w-full text-left px-4 py-2 text-[#526AA8]  hover:text-[#3C3F9D]" @click="isAdminDropdownOpen = false"> History
               </NuxtLink>
               <button @click="logout" class="block w-full text-left px-4 py-2 text-[#526AA8] hover:text-[#3C3F9D]"> Log Out
               </button>
@@ -284,6 +284,7 @@
 
   <LetterBoxPopup
     :isVisible="isLetterBoxPopupVisible"
+    :is-logged-in="isLoggedIn"
     @close-letter-box="isLetterBoxPopupVisible = false"
   />
 </template>
@@ -395,7 +396,9 @@ if (process.client) {
   });
 }
 
-const logout = () => {
+const { user: adminUser, isLoggedIn, logout: logoutSession } = useAuth();
+const logout = async () => {
+  await logoutSession();
   localStorage.removeItem("adminToken");
   localStorage.removeItem("adminUser");
   router.push("/");

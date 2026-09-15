@@ -15,7 +15,7 @@
     </div>
 
     <!-- Google Sign-in -->
-    <button 
+    <button
       class="w-full max-w-md flex items-center gap-3 px-6 py-4 bg-white rounded-2xl shadow-md hover:shadow-lg transition border border-gray-200 mb-6"
       @click="loginWithGoogle">
       <img src="/google.png" alt="Google" class="h-5 w-5" >
@@ -26,7 +26,7 @@
     <div class="text-gray-400 text-sm font-medium mb-6">OR</div>
 
     <!-- Microsoft Sign-in -->
-    <button 
+    <button
       class="w-full max-w-md flex items-center gap-3 px-6 py-4 bg-white rounded-2xl shadow-md hover:shadow-lg transition border border-gray-200"
       @click="loginWithMicrosoft">
       <img src="/microsoft365.png" alt="Microsoft" class="h-5 w-5" >
@@ -49,39 +49,12 @@ const emit = defineEmits(['back'])
 // ✅ สำหรับ Google → redirect ไป OAuth จริง
 const config = useRuntimeConfig()
 
-const loginWithGoogle = () => {
-  const baseUrl = config.public.authURL;
-  const currentPath = window.location.pathname;
-  // Store current path for redirect after login
-  sessionStorage.setItem('loginRedirectPath', currentPath);
-  // Make sure the URL matches the backend route exactly
-  window.location.href = `${baseUrl}/api/auth/google`;
-  console.log('Redirecting to Google OAuth...');
-}
-
-
-// ❌ สำหรับ Microsoft ยังใช้ mock อยู่
-const loginWithMicrosoft = async () => {
-  try {
-    const response = await api('/users/employee-login', {
-      method: 'POST',
-      body: {
-        email: 'user@outlook.com',
-        name: 'Microsoft User',
-        provider: 'microsoft',
-      },
-    })
-
-    if (response.user) {
-      // Store in localStorage to align with auth/myinfo checks
-      localStorage.setItem('token', response.token)
-      router.push('/')
-    }
-  } catch (err) {
-    console.error(err)
-    alert('Microsoft login failed')
-  }
-}
+const startOAuth = (provider) => {
+  localStorage.removeItem('token');
+  window.location.href = `${String(config.public.apiBaseURL).replace(/\/$/, '')}/auth/${provider}`;
+};
+const loginWithGoogle = () => startOAuth('google');
+const loginWithMicrosoft = () => startOAuth('microsoft');
 
 const goBack = () => {
   emit('back')

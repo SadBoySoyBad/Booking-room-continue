@@ -82,12 +82,6 @@ const isLoggedIn = ref(false);
 
 // ฟังก์ชันสำหรับดึงข้อมูลผู้ใช้จาก Token
 async function fetchUserFromToken() {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    isLoggedIn.value = false;
-    currentUser.value = null;
-    return; // ถ้าไม่มี token จะหยุดการทำงาน
-  }
 
   try {
     const response = await const config = useRuntimeConfig()\n    fetch(${config.public.apiBaseURL}/auth/verify', { // Endpoint สำหรับตรวจสอบ token
@@ -120,42 +114,7 @@ async function fetchUserFromToken() {
 async function fetchMyBookings() {
   loading.value = true;
   try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      // ผู้ใช้ไม่ได้ล็อกอิน ไม่ต้องดึงข้อมูล
-      isLoggedIn.value = false;
-      loading.value = false;
-      return;
-    }
-
-    // เรียก Endpoint ที่เราสร้างใหม่สำหรับดึงประวัติการจองของผู้ใช้ที่เข้าสู่ระบบ
-    // URL: /api/bookings/my-history
-    const response = await fetch('/api/bookings/my-history', {
-      headers: {
-        'Authorization': `Bearer ${token}` // ส่ง token ไปกับ request
-      }
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      bookings.value = data;
-      console.log('My booking history:', data);
-    } else if (response.status === 401 || response.status === 403) {
-      // ถ้าไม่ได้รับอนุญาต (Unauthorized/Forbidden)
-      console.warn('Unauthorized to view booking history. User might not be logged in or lack permissions.');
-      bookings.value = [];
-      isLoggedIn.value = false; // ตั้งค่าเป็น false หากไม่ได้รับอนุญาต
-      localStorage.removeItem('token'); // ลบ token ที่อาจหมดอายุ/ไม่ถูกต้อง
-    } else {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-  } catch (error) {
-    console.error('Error fetching my bookings:', error);
-    bookings.value = [];
-  } finally {
-    loading.value = false; // ไม่ว่าจะสำเร็จหรือล้มเหลว ให้หยุดสถานะ loading
   }
-}
 
 // Helper function สำหรับจัดรูปแบบวันที่และเวลา (ตัวอย่าง: 11 กรกฎาคม 2568, 14:30)
 function formatDateTime(dateTimeString) {
@@ -261,125 +220,24 @@ onMounted(async () => {
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useApi } from '~/composables/useApi'; // Import useApi
-
-const api = useApi(); // Use the composable
-
-// ref สำหรับเก็บข้อมูล
+const api = useApi();
+const { user: currentUser, isLoggedIn, fetchUser } = useAuth();
 const bookings = ref([]);
 const loading = ref(true);
-const currentUser = ref(null);
-const isLoggedIn = ref(false);
-
-// ฟังก์ชันสำหรับดึงข้อมูลผู้ใช้จาก Token
-async function fetchUserFromToken() {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    isLoggedIn.value = false;
-    currentUser.value = null;
-    return;
-  }
-
-  try {
-    const response = await api('/auth/verify', { method: 'GET' }); // Use api()
-    if (response.user) {
-      currentUser.value = response.user;
-      isLoggedIn.value = true;
-      console.log('User verified in history page:', currentUser.value);
-    } else {
-      console.error('Token verification failed in history page:', response.statusText);
-      localStorage.removeItem('token');
-      isLoggedIn.value = false;
-      currentUser.value = null;
-    }
-  } catch (error) {
-    console.error('Error fetching user from token in history page:', error);
-    localStorage.removeItem('token');
-    isLoggedIn.value = false;
-    currentUser.value = null;
-  }
-}
-
-// ฟังก์ชันสำหรับดึงประวัติการจองของผู้ใช้ที่เข้าสู่ระบบ
-async function fetchMyBookings() {
-  loading.value = true;
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      isLoggedIn.value = false;
-      loading.value = false;
-      return;
-    }
-
-    // Use api() for the correct URL and authorization
-    const response = await api('/bookings/my-history');
-
-    if (response) {
-      bookings.value = response;
-      console.log('My booking history:', response);
-    } else if (response.status === 401 || response.status === 403) {
-      console.warn('Unauthorized to view booking history. User might not be logged in or lack permissions.');
-      bookings.value = [];
-      isLoggedIn.value = false;
-      localStorage.removeItem('token');
-    } else {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-  } catch (error) {
-    console.error('Error fetching my bookings:', error);
-    bookings.value = [];
-  } finally {
-    loading.value = false;
-  }
-}
-
-// Helper function สำหรับจัดรูปแบบวันที่และเวลา (ตัวอย่าง: 11 กรกฎาคม 2568, 14:30)
-function formatDateTime(dateTimeString) {
-  const date = new Date(dateTimeString);
-  return date.toLocaleDateString('th-TH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
-}
-
-// Helper function สำหรับจัดรูปแบบเวลาเท่านั้น (ตัวอย่าง: 14:30)
-function formatTime(dateTimeString) {
-  const date = new Date(dateTimeString);
-  return date.toLocaleTimeString('th-TH', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
-}
-
+const formatDateTime = (value) => new Date(value).toLocaleString('th-TH', {
+  year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+});
+const formatTime = (value) => new Date(value).toLocaleTimeString('th-TH', {
+  hour: '2-digit', minute: '2-digit', hour12: false,
+});
 onMounted(async () => {
-  if (import.meta.client) {
-    console.log('--- onMounted start ---');
-    await fetchUserFromToken();
-    console.log('After fetchUserFromToken - isLoggedIn:', isLoggedIn.value);
-    console.log('After fetchUserFromToken - currentUser:', currentUser.value);
-
-    if (isLoggedIn.value) {
-      console.log('isLoggedIn is TRUE, calling fetchMyBookings...');
-      await fetchMyBookings();
-      console.log('fetchMyBookings call finished.');
-    } else {
-      console.log('isLoggedIn is FALSE, NOT calling fetchMyBookings.');
-    }
-    console.log('--- onMounted end ---');
-  }
-  
+  try {
+    await fetchUser();
+    if (isLoggedIn.value) bookings.value = await api('/bookings/my-history');
+  } catch (error) { console.error('History request failed:', error.message); }
+  finally { loading.value = false; }
 });
-
-definePageMeta({
-  middleware: ['auth']
-});
-
-
+definePageMeta({ middleware: ['auth'] });
 </script>
 
 <style scoped>

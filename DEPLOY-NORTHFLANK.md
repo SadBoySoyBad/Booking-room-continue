@@ -1,3 +1,5 @@
+> Historical deployment notes. These SQL-era instructions do not match the current MongoDB models. Use README.md and DEPLOY-BACKEND-VERCEL.md for the supported configuration.
+
 # Deploy บน Northflank (ไม่ต้องผูกบัตร, ไม่สลีป)
 
 เอกสารถูกจัดทำเพื่อโปรเจกต์นี้ (backend: `back/`, frontend: `front/`, DB: MariaDB) โดยไม่ใช้ Nginx/Certbot เพราะ Northflank ออก HTTPS ให้เอง

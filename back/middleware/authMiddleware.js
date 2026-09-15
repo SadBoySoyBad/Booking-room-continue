@@ -7,7 +7,7 @@ const authMiddleware = async (req, res, next) => {
   let token;
 
   // ✅ 1. ดึงจาก Authorization Header (Guest/Employee)
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+  if (req.headers.authorization && /^Bearer\s+\S+$/i.test(req.headers.authorization)) {
     token = req.headers.authorization.split(' ')[1];
   }
 
@@ -23,7 +23,8 @@ const authMiddleware = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded.user_id || decoded.id; // 🔍 ป้องกันชื่อ key ไม่ตรง
+    const userId = decoded.user_id || decoded.id;
+    if (!require('mongoose').isObjectIdOrHexString(userId)) return res.status(401).json({ message: 'Invalid token subject.' }); // 🔍 ป้องกันชื่อ key ไม่ตรง
 
     // ✅ ดึงข้อมูลผู้ใช้จาก DB
     const user = await User.getById(userId);
@@ -35,7 +36,7 @@ const authMiddleware = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Error verifying token:', error);
-    res.status(403).json({ message: 'Token is not valid or expired.' });
+    res.status(401).json({ message: 'Token is not valid or expired.' });
   }
 };
 
@@ -48,4 +49,15 @@ const authorizeRoles = (roles) => {
   };
 };
 
-module.exports = { authMiddleware, authorizeRoles };
+const optionalAuthMiddleware = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1] || cookie.parse(req.headers.cookie || '').auth_token;
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const id = decoded.id || decoded.user_id;
+      if (require('mongoose').isObjectIdOrHexString(id)) req.user = await User.getById(id);
+    }
+  } catch { /* Public room availability remains accessible without a valid session. */ }
+  next();
+};
+module.exports = { authMiddleware, authorizeRoles, optionalAuthMiddleware };

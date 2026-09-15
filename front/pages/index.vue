@@ -214,7 +214,7 @@ const logout = () => {
 };
 
 const goToReservation = () => {
-  router.push('/reservation');
+  router.push('/booking');
 };
 
 const goToHistory = () => {

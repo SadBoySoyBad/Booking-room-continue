@@ -115,7 +115,7 @@ import AdminPopup from "~/components/AdminPopup.vue";
 const api = useApi();
 
 // definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] }); // เพิ่ม middleware
-definePageMeta({ layout: 'admin-layout'}); 
+definePageMeta({ layout: 'admin-layout', middleware: ['auth-admin'] });
 useHead({ title: "Manage Rooms Admin" });
 
 const rooms = ref([]);

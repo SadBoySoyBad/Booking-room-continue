@@ -1,14 +1,19 @@
+const { errorResponse, publicUser } = require('../utils/http');
 const Room = require('../models/Room');
 
 const roomController = {
     getAllRooms: async (req, res) => {
-        const date = req.query.date || new Date().toISOString().split('T')[0];
+        const date = req.query.date || require('../utils/dates').bangkokDate();
         try {
             const rooms = await Room.getAllWithCalculatedStatus(date);
-            res.json(rooms);
+            res.json(rooms.map(room => {
+                const booking = room.current_booking;
+                if (!booking || req.user?.role === 'admin' || (req.user?.id && booking.user_id === req.user.id)) return room;
+                return { ...room, current_booking: { id: booking.id, start_time: booking.start_time, end_time: booking.end_time, status: booking.status } };
+            }));
         } catch (error) {
             console.error('Error in getAllRooms (calculated status):', error);
-            res.status(500).json({ message: 'Internal Server Error' });
+            return errorResponse(res, error);
         }
     },
 
@@ -22,7 +27,7 @@ const roomController = {
             }
         } catch (error) {
             console.error('Error in getRoomById:', error);
-            res.status(500).json({ message: 'Internal Server Error' });
+            return errorResponse(res, error);
         }
     },
 
@@ -36,10 +41,10 @@ const roomController = {
             res.status(201).json({ message: 'Room created successfully', room: newRoom });
         } catch (error) {
             console.error('Error in createRoom:', error);
-            if (error.code === 'ER_DUP_ENTRY') {
+            if (error.code === 11000) {
                 return res.status(409).json({ message: 'Room name already exists.' });
             }
-            res.status(500).json({ message: 'Internal Server Error' });
+            return errorResponse(res, error);
         }
     },
 
@@ -58,10 +63,10 @@ const roomController = {
             }
         } catch (error) {
             console.error('Error in updateRoom:', error);
-            if (error.code === 'ER_DUP_ENTRY') {
+            if (error.code === 11000) {
                 return res.status(409).json({ message: 'Room name already exists.' });
             }
-            res.status(500).json({ message: 'Internal Server Error' });
+            return errorResponse(res, error);
         }
     },
 
@@ -75,7 +80,7 @@ const roomController = {
             }
         } catch (error) {
             console.error('Error in deleteRoom:', error);
-            res.status(500).json({ message: 'Internal Server Error' });
+            return errorResponse(res, error);
         }
     },
 };

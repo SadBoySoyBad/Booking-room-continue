@@ -1,149 +1,53 @@
-// back/controllers/authController.js
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
-
-const authController = {
+const { publicUser, errorResponse } = require('../utils/http');
+const cookieOptions = () => ({
+  httpOnly: true, secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/',
+  ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
+});
+const tokenFor = (user, expiresIn = '24h') => jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn });
+module.exports = {
   oauthSuccess: async (req, res, returnTo) => {
-    try {
-      if (!req.user) {
-        return res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
-      }
-
-      const token = jwt.sign(
-        {
-          id: req.user.id,
-          email: req.user.email,
-          role: req.user.role
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: '24h' }
-      );
-
-      res.cookie('auth_token', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
-        path: '/',
-        maxAge: 24 * 60 * 60 * 1000
-      });
-
-      res.redirect(returnTo || `${process.env.FRONTEND_URL}/booking`);
-    } catch (error) {
-      console.error('OAuth Success Handler Error:', error);
-      res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
-    }
+    if (!req.user) return res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
+    res.cookie('auth_token', tokenFor(req.user), { ...cookieOptions(), maxAge: 86400000 });
+    res.redirect(returnTo || `${process.env.FRONTEND_URL}/booking`);
   },
-
   guestLogin: async (req, res) => {
     const { name, phone, company } = req.body;
-    if (!name || !phone) {
-      return res.status(400).json({ message: 'ชื่อและเบอร์โทรเป็นข้อมูลจำเป็น' });
+    if (typeof name !== 'string' || !name.trim() || typeof phone !== 'string' || !/^[+0-9 ()-]{7,20}$/.test(phone)) {
+      return res.status(400).json({ message: 'Name and a valid phone number are required.' });
     }
-
     try {
-      let user = await User.findByPhone(phone);
-      if (!user) {
-        user = await User.createGuest(name, phone, company);
-      } else {
-        await User.update(user.id, {
-          username: name,
-          company: company || null,
-          last_login_provider: 'guest'
-        });
+      let user = await User.findByPhone(phone.trim());
+      if (user && user.role !== 'guest') return res.status(403).json({ message: 'Please use employee sign-in for this account.' });
+      if (!user) user = await User.createGuest(name.trim(), phone.trim(), company);
+      else {
+        await User.update(user.id, { username: name.trim(), company: company || null, last_login_provider: 'guest' });
+        user = await User.getById(user.id);
       }
-
-      const token = jwt.sign(
-        { id: user.id, username: user.username, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: '1h' }
-      );
-
-      res.json({ user, token });
-    } catch (error) {
-      console.error('Guest login failed:', error);
-      res.status(500).json({ message: 'Guest login failed', error: error.message });
-    }
+      const token = tokenFor(user, '1h');
+      res.cookie('auth_token', token, { ...cookieOptions(), maxAge: 3600000 });
+      res.json({ user: publicUser(user), token });
+    } catch (error) { errorResponse(res, error); }
   },
-
   employeeLogin: async (req, res) => {
-    const { name, email, provider } = req.body;
-
-    if (!email || !provider) {
-      return res.status(400).json({ message: 'email และ provider จำเป็น' });
-    }
-
-    const domain = email.split('@')[1] || '';
-    const company = domain.split('.')[0] || 'unknown';
-
+    // Legacy endpoint accepts credentials only, never an unverified provider/email assertion.
+    const { email, password } = req.body;
+    if (typeof email !== 'string' || typeof password !== 'string') return res.status(400).json({ message: 'Use Google/Microsoft sign-in or supply email and password.' });
     try {
-      let user = await User.findByEmail(email);
-      if (!user) {
-        user = await User.create(name, email, null, 'employee', null, company);
-        await User.update(user.id, { last_login_provider: provider });
-      } else {
-        await User.update(user.id, {
-          username: name,
-          company,
-          role: 'employee',
-          last_login_provider: provider
-        });
-      }
-
-      const token = jwt.sign(
-        { id: user.id, username: user.username, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: '2h' }
-      );
-
-      res.json({ user, token });
-    } catch (err) {
-      console.error('Employee login failed:', err);
-      res.status(500).json({ message: 'Login failed', error: err.message });
-    }
+      const user = await User.findByEmail(email.trim().toLowerCase());
+      if (!user?.password || !await bcrypt.compare(password, user.password)) return res.status(401).json({ message: 'Invalid credentials.' });
+      const token = tokenFor(user);
+      res.cookie('auth_token', token, { ...cookieOptions(), maxAge: 86400000 });
+      res.json({ user: publicUser(user), token });
+    } catch (error) { errorResponse(res, error); }
   },
-
   logout: (req, res) => {
-    try {
-      if (typeof req.logout === 'function') {
-        // Avoid passport session save calls on serverless
-        try { req.logout(); } catch (_) {}
-      }
-    } catch (_) {}
-
-    // Clear JWT cookie robustly (cover host-only and domain cookies)
-    const cookieBase = {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      path: '/',
-    };
-    try {
-      res.clearCookie('auth_token', {
-        ...cookieBase,
-        domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
-      });
-      // Also set explicit expired cookie to cover some browsers
-      res.cookie('auth_token', '', {
-        ...cookieBase,
-        domain: process.env.NODE_ENV === 'production' ? (process.env.COOKIE_DOMAIN || undefined) : undefined,
-        maxAge: 0,
-        expires: new Date(0),
-      });
-      // In case cookie was set as host-only, clear again without domain option
-      res.clearCookie('auth_token', { ...cookieBase });
-      res.cookie('auth_token', '', { ...cookieBase, maxAge: 0, expires: new Date(0) });
-    } catch (_) {}
-
-    // Clear session cookie used only for OAuth state (not for auth)
-    try {
-      res.clearCookie('session', { ...cookieBase });
-      res.cookie('session', '', { ...cookieBase, maxAge: 0, expires: new Date(0) });
-    } catch (_) {}
-
-    // return 200 JSON for SPA to handle
-    return res.status(200).json({ message: 'Logged out' });
-  }
+    req.session = null;
+    res.clearCookie('auth_token', cookieOptions());
+    res.clearCookie('auth_token', { ...cookieOptions(), domain: undefined });
+    res.status(200).json({ message: 'Logged out' });
+  },
 };
-
-module.exports = authController;

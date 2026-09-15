@@ -1,5 +1,5 @@
 // back/app.js
-require('dotenv').config();
+require('./config/env');
 const express = require('express');
 const cors = require('cors');
 // init DB pool and test connection (db.js runs a test on import)
@@ -9,7 +9,8 @@ const cookieSession = require('cookie-session');
 const passport = require('passport');
 require('./config/passport');
 
-const { authMiddleware, authorizeRoles } = require('./middleware/authMiddleware');
+const { errorResponse } = require('./utils/http');
+const db = require('./db');
 
 const authRoutes = require('./routes/authRoutes');
 const roomRoutes = require('./routes/roomRoutes');
@@ -40,7 +41,7 @@ app.use(
           .filter(Boolean)
           .forEach((o) => allowed.add(o));
       }
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV !== 'production') {
         allowed.add('http://localhost:3000');
         allowed.add('http://127.0.0.1:3000');
       }
@@ -48,7 +49,7 @@ app.use(
       try {
         const url = new URL(origin);
         const hostname = url.hostname;
-        const isVercelPreview = hostname.endsWith('.vercel.app');
+        const isVercelPreview = false;
         if (allowed.has(origin) || isVercelPreview) {
           return callback(null, true);
         }
@@ -57,13 +58,14 @@ app.use(
         if (allowed.has(origin)) return callback(null, true);
       }
 
-      return callback(new Error('Not allowed by CORS'));
+      return callback(Object.assign(new Error('Not allowed by CORS'), { status: 403 }));
     },
     credentials: true,
   })
 );
 
-app.use(express.json());
+if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is required.');
+app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Cookie-based session for serverless environments
@@ -86,6 +88,18 @@ app.use(passport.initialize());
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'Welcome to BookingRuk Backend API!' });
 });
+
+// Liveness is independent of DB; readiness checks the real dependency.
+app.get(['/api/healthz', '/healthz'], (req, res) => res.json({ status: 'ok' }));
+app.get('/api/readyz', async (req, res) => {
+  try { await db.connectMongo(); await db.connection.db.admin().ping(); res.json({ status: 'ready' }); }
+  catch { res.status(503).json({ status: 'unavailable' }); }
+});
+app.use(async (req, res, next) => {
+  try { await db.connectMongo(); next(); }
+  catch { res.status(503).json({ message: 'Database unavailable. Check MONGODB_URI.' }); }
+});
+app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
 // Routes
 // Mount with and without /api prefix to be resilient to platform path rewriting
@@ -116,7 +130,7 @@ app.use((req, res, next) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('Server Error:', err);
-  res.status(500).json({ message: 'Internal Server Error', error: err.message });
+  errorResponse(res, err);
 });
 
 module.exports = app;

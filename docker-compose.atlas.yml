@@ -1,0 +1,8 @@
+# Load credentials from the ignored backend environment file; never embed them here.
+# The local Mongo volume is retained so the default Compose setup remains available.
+services:
+  backend:
+    environment:
+      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI in back/.env}
+      MONGODB_DB: ${MONGODB_DB:-booking}
+      DNS_SERVERS: ${DNS_SERVERS:-}

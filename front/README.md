@@ -1,3 +1,5 @@
+> See the repository-root README.md and ARCHITECTURE.md for current setup and architecture. The text below is historical.
+
 # Nuxt Minimal Starter
 
 Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.

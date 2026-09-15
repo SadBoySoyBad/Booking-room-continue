@@ -1,9 +1,12 @@
 // back/models/Room.js (MongoDB + Mongoose)
 const mongoose = require('../db');
+const { bangkokDate, dayBounds } = require('../utils/dates');
+const { fail } = require('../utils/http');
 
 const RoomSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true },
+    name: { type: String, required: true, unique: true, trim: true },
+    booking_version: { type: Number, default: 0, select: false },
     status: { type: String, enum: ['AVAILABLE', 'OCCUPIED', 'MAINTENANCE'], default: 'AVAILABLE' },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
@@ -28,10 +31,9 @@ const getBookingModel = () => {
 };
 
 const Room = {
-  getAllWithCalculatedStatus: async (forDate = new Date().toISOString().split('T')[0]) => {
+  getAllWithCalculatedStatus: async (forDate = bangkokDate()) => {
     const rooms = await RoomModel.find().lean({ virtuals: true });
-    const dayStart = new Date(`${forDate}T00:00:00.000Z`);
-    const dayEnd = new Date(`${forDate}T23:59:59.999Z`);
+    const { start: dayStart, end: dayEnd } = dayBounds(forDate);
     const now = new Date();
 
     const results = await Promise.all(
@@ -44,14 +46,14 @@ const Room = {
         } else {
           // live booking overlapping now
           const BookingModel = getBookingModel();
-          const live = await BookingModel.findOne({
+          const live = forDate === bangkokDate() ? await BookingModel.findOne({
             room_id: room.id,
             status: { $in: ['PENDING', 'APPROVED'] },
             start_time: { $lt: now },
             end_time: { $gt: now },
           })
-            .select('id topic start_time end_time guest_name guest_company status')
-            .lean({ virtuals: true });
+            .select('id topic start_time end_time guest_name guest_company status user_id')
+            .lean({ virtuals: true }) : null;
 
           if (live) {
             currentBooking = live;
@@ -62,10 +64,7 @@ const Room = {
             const hasBooking = await BookingModel.exists({
               room_id: room.id,
               status: { $in: ['PENDING', 'APPROVED'] },
-              $or: [
-                { start_time: { $gte: dayStart, $lte: dayEnd } },
-                { end_time: { $gte: dayStart, $lte: dayEnd } },
-              ],
+              start_time: { $lt: dayEnd }, end_time: { $gt: dayStart },
             });
             displayStatus = hasBooking ? 'OCCUPIED' : 'AVAILABLE';
           }
@@ -88,13 +87,20 @@ const Room = {
   },
 
   update: async (id, name, status) => {
-    const result = await RoomModel.updateOne({ _id: id }, { $set: { name, status } });
-    return result.modifiedCount > 0;
+    const data = {};
+    if (name !== undefined) data.name = name;
+    if (status !== undefined) data.status = status;
+    const result = await RoomModel.updateOne({ _id: id }, { $set: data }, { runValidators: true });
+    return result.matchedCount > 0;
   },
 
   delete: async (id) => {
-    const result = await RoomModel.deleteOne({ _id: id });
-    return result.deletedCount > 0;
+    return mongoose.connection.transaction(async (session) => {
+      const room = await RoomModel.findOneAndUpdate({ _id: id }, { $inc: { booking_version: 1 } }, { session });
+      if (!room) return false;
+      if (await getBookingModel().exists({ room_id: id }).session(session)) throw fail(409, 'This room has booking history. Use maintenance status instead.');
+      return (await RoomModel.deleteOne({ _id: id }, { session })).deletedCount > 0;
+    });
   },
 };
 
