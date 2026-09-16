@@ -1,4 +1,4 @@
-# ผลตรวจ — 15 กันยายน 2026
+# ผลตรวจ — 15–16 กันยายน 2026
 
 ## ระบบที่เปิดไว้
 
@@ -55,8 +55,8 @@ SHA-256 ของภาพ login คู่สุดท้าย:
 
 ## ยังไม่ได้ยืนยัน
 
-- Deployment ของ source ใหม่นี้บน Vercel
-- การเชื่อมต่อจาก Vercel ไปยัง Atlas ใหม่ (ยืนยัน credentials และการเชื่อมต่อจากเครื่อง/Docker แล้ว; ผู้ใช้เพิ่ม IP Access List สำหรับ Vercel และแสดงสถานะ Active แล้ว)
+- Google production callback ยังตอบ `redirect_uri_mismatch`; ต้องลงทะเบียน callback ของ frontend ใน Google Cloud
+- บัญชีผู้ดูแลถาวรรออีเมลที่เจ้าของระบุ; Microsoft credentials ยังไม่มี
 - Google/Microsoft OAuth round-trip และการส่ง Calendar event ด้วย provider credentials จริง
 - Attendance/check-in จริง, immutable audit log, SMTP reminders และกราฟ company donut ที่ใน source เดิมยังเป็น placeholder
 
@@ -74,5 +74,26 @@ Calendar adapter ทดสอบด้วย stub ของ Google API จึง
 
 ## Git / production
 
-จัดชุดแก้บน branch `codex/restore-booking-system` สำหรับตรวจและ deploy ต่อ; ณ เวลาบันทึกรายงานนี้ยังไม่ได้ push หรือ deploy โค้ดใหม่
-หากจะ push ต่อ ต้องแจ้ง branch/commit, รายการแก้ไข และผลทดสอบตามที่ผู้ใช้กำหนด
+Push commit `0a5785a99528d71417f5ef247300c0102b91eb4b` บน branch `codex/restore-booking-system` แล้ว และ deploy เป็น production ของทั้งสองโปรเจกต์ โดยไม่ได้ merge เข้า `main`
+
+## Production verification — 16 กันยายน 2026 (Asia/Bangkok)
+
+- Frontend: https://booking-room-continue.vercel.app
+- Backend: https://booking-room-continue-backend.vercel.app
+- Vercel project root: `front` / `back`, Node 22.x ทั้งคู่
+- Production deployments: frontend `dpl_94VJLKwbWgzioh2VxQhBsBBWTk8E`, backend `dpl_3UGbrin781Uw3AySTj64cCkF4ndR` — READY
+- ตั้ง Atlas URI/database, frontend/backend URLs, CORS, host-only cookie และ OAuth callback ใน backend
+- ตั้ง frontend `NUXT_BACKEND_URL`, `NUXT_PUBLIC_API_BASE_URL=/api` และล้าง `NUXT_PUBLIC_AUTH_URL` เดิมเพื่อเริ่ม OAuth ผ่านโดเมนหน้าเว็บ
+- เปลี่ยน JWT/session signing secret เดิมเป็นค่าสุ่มใหม่ใน Vercel และ Docker; ตรวจ guest login, signature, cookie, myinfo และ logout หลัง deploy รอบล่าสุดผ่าน (`artifacts/production-final-check.json`)
+- ทั้ง backend และ frontend `/api/readyz` ตอบ 200 และ `/api/rooms` คืน 4 ห้อง
+- Guest login ผ่านหน้าเว็บจริง มี HttpOnly/Secure cookie บนโดเมน frontend
+- จองผ่านฟอร์มจริง → confirmation → เปิด history ใหม่ ข้อมูลเวลา Bangkok, ห้อง, เบอร์, participants และ requirements ครบ
+- เข้าสู่ระบบบัญชี admin ทดสอบผ่าน password endpoint จริง และอนุมัติใน browser ด้วย cookie โดยไม่มี localStorage token
+- หน้า dashboard, requests, manage-rooms, manage-accounts, settings, analytics, activities โหลดสำเร็จ; settings บันทึกแล้วอ่านกลับตรงกัน
+- Guest เห็นสถานะ APPROVED หลังอนุมัติ และถูกปฏิเสธด้วย 403 เมื่อเรียก API ผู้ดูแล
+- ยิงคำขอจองช่วงเดียวกัน 2 คำขอผ่าน frontend Vercel พร้อมกัน: 201 หนึ่งคำขอ / 409 หนึ่งคำขอ
+- ไม่พบ page error, console error หรือ API 5xx ในรอบ production admin verification
+- ลบเฉพาะ 2 bookings, guest QA และ admin QA ที่สร้างทดสอบแล้ว: เหลือ users 0, bookings 0, rooms 4
+- หลักฐาน: `artifacts/production-browser-results.json`, `artifacts/production-qa-cleanup.json`, `artifacts/production-admin-*.png` (Git ignored)
+
+Google Calendar ปิดอยู่และไม่ได้ทดสอบส่ง event จริง; Google/Microsoft sign-in ยังไม่ผ่าน provider round-trip การโหลดหน้า analytics สำเร็จไม่ได้ยืนยันว่าฟีเจอร์ placeholder เดิมมีข้อมูลจริงครบแล้ว

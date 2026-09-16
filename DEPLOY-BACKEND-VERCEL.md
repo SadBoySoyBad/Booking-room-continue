@@ -7,13 +7,15 @@ Verified projects in Potter's projects (`potters-projects-d4f2f738`):
 - Both connect to `SadBoySoyBad/Booking-room-continue`.
 - `booking-room-v1` and `booking-room-v1-tz3u` belong to the older repository.
 
-The public frontend currently loads. The old backend returns FUNCTION_INVOCATION_FAILED. Runtime Logs supplied by the owner identify `querySrv ENOTFOUND _mongodb._tcp.booking.vs1tbkz.mongodb.net`, followed by process exit 1. Independent SRV checks against Cloudflare and Google public DNS both return NXDOMAIN. Local repairs have not been pushed or deployed.
+Both production projects now run commit `0a5785a` from `codex/restore-booking-system` (verified 16 September 2026, Asia/Bangkok). Public readiness, guest booking, browser admin approval, settings persistence and concurrent booking checks passed. The branch has not been merged into `main`; future deployments must use the repaired source. See TEST-REPORT.md for evidence and remaining OAuth configuration.
+
+Previously, the backend returned FUNCTION_INVOCATION_FAILED. Owner-supplied logs identified `querySrv ENOTFOUND _mongodb._tcp.booking.vs1tbkz.mongodb.net`, followed by process exit 1. Independent SRV checks returned NXDOMAIN.
 
 ## 0. Current Atlas connection
 
-The owner has now created a new Booking cluster at `booking.7uebkhr.mongodb.net`. Credentials are saved only in ignored `back/.env`. Database `booking` was verified empty, then initialized with collections/indexes and four rooms. Real Atlas transaction/login/approval/history tests passed in a separate temporary database, which was removed afterward. The running local Docker backend now uses this cluster.
+The owner created a new Booking cluster at `booking.7uebkhr.mongodb.net`. Credentials are stored in ignored local environment files and Vercel's encrypted environment. Database `booking` was initialized with collections/indexes and four rooms. Both Docker and Vercel production use this cluster. Temporary verification records were removed after testing.
 
-For Vercel, use the database-specific URI from ignored `back/.env.vercel-database` and set `MONGODB_DB=booking`. The owner has now shown the `0.0.0.0/0` IP Access List entry as Active. This permits network access but does not itself verify credentials or environment values in Vercel. The backend environment changes are being applied through the dashboard and still need deployment verification. Do not upload the environment file to GitHub.
+Vercel now uses the database-specific URI with `/booking` and `MONGODB_DB=booking`. The owner configured the Atlas access list; real Vercel requests verified connectivity. Environment updates were applied through the authenticated Vercel CLI and new production deployments. Do not upload environment files to GitHub.
 
 The following notes describe the earlier investigation of the old hostname; the new cluster starts with new data.
 
@@ -65,9 +67,12 @@ Root Directory: `front`, framework: Nuxt, Node: 22.x.
 ```dotenv
 NUXT_PUBLIC_API_BASE_URL=/api
 NUXT_BACKEND_URL=https://booking-room-continue-backend.vercel.app
+NUXT_PUBLIC_AUTH_URL=
 ```
 
 `NUXT_BACKEND_URL` is server-only. Browsers call their own `/api`, and Nitro proxies to Express. This avoids relying on third-party cookies between two Vercel domains.
+
+Clear any old `NUXT_PUBLIC_AUTH_URL` pointing directly at the backend. An empty value starts OAuth through the frontend, matching the callback's cookie origin.
 
 Do not put JWT_SECRET or OAuth client secrets into NUXT_PUBLIC_* variables. The frontend no longer needs OAuth client secrets at all.
 

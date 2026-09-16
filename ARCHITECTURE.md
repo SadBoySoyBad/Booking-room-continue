@@ -1,6 +1,6 @@
 # Architecture และผลตรวจระบบ Arrangemeet
 
-ตรวจจาก source, Git, GitHub deployment history, HTTP ของเว็บเดิม และการทดสอบในเครื่อง เมื่อ 15 กันยายน 2026
+ตรวจจาก source, Git, GitHub deployment history และการทดสอบทั้งในเครื่องและ production เมื่อ 15–16 กันยายน 2026
 
 ## 1. Repository และ deployment ที่พบ
 
@@ -10,10 +10,10 @@
 - Frontend เดิม: https://booking-room-continue.vercel.app — HTTP 200, Nuxt, Server: Vercel
 - Backend ที่หน้าเว็บเดิมเรียก: https://booking-room-continue-backend.vercel.app
 - Backend เดิมตอบ `FUNCTION_INVOCATION_FAILED` ทั้ง `/api/healthz` และ `/api/rooms`
-- ล่าสุดผู้ใช้สร้าง Atlas ใหม่ `booking.7uebkhr.mongodb.net`; เชื่อมจริงและ initialize database `booking` แล้ว Local Docker ใช้ Atlas ใหม่นี้ผ่าน Compose override; ยังไม่ได้เปลี่ยน Vercel
+- ผู้ใช้สร้าง Atlas ใหม่ `booking.7uebkhr.mongodb.net`; initialize database `booking` แล้ว ทั้ง Docker และ Vercel production ใช้ฐานข้อมูลใหม่นี้ มี 4 ห้องเริ่มต้น
 - GitHub มี production deployment สำเร็จของทั้งสอง project วันที่ 4 ธันวาคม 2025 การ deploy สำเร็จในอดีตไม่ได้ยืนยันว่า API ยังทำงานในวันนี้
 - Runtime Log ที่ผู้ใช้ส่งยืนยัน `querySrv ENOTFOUND _mongodb._tcp.booking.vs1tbkz.mongodb.net` แล้ว process exit 1; ตรวจ SRV ผ่าน DNS 1.1.1.1/8.8.8.8 ได้ NXDOMAIN เช่นกัน ต้องตรวจสถานะ cluster/hostname ใน Atlas
-- ไม่มี project link หรือ session เบราว์เซอร์ที่เชื่อมต่อบัญชี Vercel/Atlas ในสภาพแวดล้อมนี้ จึงยังเปลี่ยน environment หรือกู้ cluster ผ่านบัญชีจริงไม่ได้
+- ผู้ใช้ยืนยัน Vercel CLI แล้ว ตั้งค่า environment และ deploy ทั้งสองโปรเจกต์จาก commit `0a5785a` บน branch `codex/restore-booking-system` สำเร็จ โดยยังไม่ได้ merge เข้า `main`
 
 หลักฐาน deployment: [Frontend](https://api.github.com/repos/SadBoySoyBad/Booking-room-continue/deployments/3421328287/statuses), [Backend](https://api.github.com/repos/SadBoySoyBad/Booking-room-continue/deployments/3421341692/statuses)
 
@@ -191,11 +191,13 @@ Frontend ส่ง ISO datetime ที่มี `+07:00` ชัดเจน Mong
 5. ภาพหน้า login ของ Docker หลังอัปเดตเทียบ production ที่ viewport/zoom เดียวกัน มี PNG SHA-256 ตรงกัน รายละเอียดใน TEST-REPORT.md
 6. npm audit หลังอัปเดต: 0 vulnerabilities ทั้ง frontend และ backend ณ เวลาตรวจ (ไม่ได้หมายความว่าจะไม่มีช่องโหว่ใหม่ในอนาคต)
 
+ผลตรวจ production: Guest login → จองผ่านฟอร์ม → confirmation → history, admin อนุมัติผ่าน browser, หน้า admin ทั้ง 7 หน้า, settings persistence และการจองพร้อมกันผ่าน Vercel (201/409) ผ่าน ไม่พบ page/console error หรือ API 5xx ในรอบทดสอบ ลบเฉพาะข้อมูล QA แล้ว รายละเอียดอยู่ใน TEST-REPORT.md
+
 ## 7. ขอบเขตที่ยังยืนยันไม่ได้ / ส่วนที่ต้องตัดสินใจ
 
-- ยังไม่ได้ deploy source ที่แก้ขึ้น Vercel และยังไม่ได้เปลี่ยน environment ของ production ขั้นต่อไปคือตั้ง URI ของ Atlas ใหม่, Network Access และ OAuth callbacks ตามคู่มือ deployment
-- URI ของ Atlas ใหม่อยู่ใน `back/.env` ที่ Git ignore; ทดสอบจริงผ่านทั้ง Node และ Docker พร้อม 4 ห้องเริ่มต้น ส่วน Vercel ยังใช้ค่าเก่าจนกว่าจะอัปเดต environment/deploy
-- ทดลอง browser ถึง Google จริงพบ `redirect_uri_mismatch` ของ localhost callback; Microsoft local ยังไม่ได้ตั้ง credentials
+- Vercel production deploy และเชื่อม Atlas ใหม่แล้ว ทั้ง backend และ frontend `/api/readyz` ตอบ 200
+- Google จริงยังตอบ `redirect_uri_mismatch` สำหรับ callback ของ frontend production ต้องลงทะเบียน `https://booking-room-continue.vercel.app/api/auth/google/callback` ใน Google Cloud client; Microsoft ยังไม่มี credentials
+- ยังไม่มีบัญชีผู้ดูแลถาวรในฐานข้อมูลใหม่ ต้องระบุอีเมลของเจ้าของและตั้ง role ด้วย `admin:create`; บัญชี admin ชั่วคราวสำหรับ QA ถูกลบแล้ว
 - Google/Microsoft OAuth และ Google Calendar ต้องมี client credentials, callback URLs และ consent/scopes จริง จึงยังไม่ได้ยืนยัน provider round-trip ของ production
 - Guest แบบชื่อ+เบอร์ยังไม่ใช่การพิสูจน์ความเป็นเจ้าของเบอร์ การเพิ่ม OTP/password จะเปลี่ยน UX/กระบวนการเดิม จึงยังไม่ได้เพิ่ม
 - Email/calendar settings ใช้กับ Google Calendar integration เมื่อเปิดใช้งาน ไม่มีระบบ SMTP หรือ worker ส่ง reminder แยกสำหรับ guest/Microsoft
