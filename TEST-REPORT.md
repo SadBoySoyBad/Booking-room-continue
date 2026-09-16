@@ -14,7 +14,7 @@
 
 | การตรวจ | ผล |
 |---|---|
-| Backend integration tests กับ Mongo replica set จริง รวมโหมด production | 24 ผ่าน, 0 ไม่ผ่าน |
+| Backend integration tests กับ Mongo replica set จริง รวมโหมด production | 25 ผ่าน, 0 ไม่ผ่าน |
 | Frontend HTTP proxy tests | 4 ผ่าน, 0 ไม่ผ่าน |
 | Production cookie, Google/Microsoft callback, OAuth state | ผ่านด้วย provider network stub และ Mongo จริง |
 | Concurrent reservations 8 คำขอ | สำเร็จ 1, HTTP 409 จำนวน 7 |
@@ -106,5 +106,8 @@ Google Calendar ปิดอยู่และไม่ได้ทดสอบ�
 - ทดสอบฐานข้อมูลว่าง: แสดงข้อความไม่มีข้อมูล ไม่มี page/console error; หลักฐาน `artifacts/analytics-browser-results.json` และภาพ `analytics-populated.png` / `analytics-empty.png`
 - API ทดสอบ timezone ที่ขอบปี Bangkok และการแยกสถานะ APPROVED/PENDING/CANCELED ผ่าน
 - ปิดการผูกบัญชี Microsoft จากอีเมลอย่างเดียวและการผูกข้าม provider อัตโนมัติ; ทดสอบอีเมลตรงกันแต่ provider subject ต่างกันแล้วไม่ได้รับ session หรือสิทธิ์ admin
-- Backend ทั้งชุด 24 ผ่าน; รันทดสอบ system ซ้ำหลังแก้การรวมชื่อบริษัท 15 ผ่าน
+- Backend รอบล่าสุด: system 15 ผ่าน และ production/OAuth 10 ผ่าน รวม 25 กรณี; production build และ browser verification ผ่าน
 - ตรวจ provider จริงซ้ำ: Google ยัง `redirect_uri_mismatch`, Microsoft ยัง 503 เพราะไม่มี credentials
+- Deploy source `9b3177510a67c4c6b98da5619960da37398df6c7` ขึ้น production แล้ว: backend `dpl_HTBetGz8Hc38poisbAFTkyMitCKP`, frontend `dpl_EC3aZGSKjz9mYcdJQia6o1WuAR5Y` — READY
+- ทดสอบหน้า Analytics/Dashboard และผลรวมบริษัทผ่าน API production ผ่าน ไม่พบ page/console error; หลักฐาน `artifacts/production-followup-results.json`
+- Docker frontend/backend build และ startup ผ่าน; readiness ทั้งสองฝั่งในเครื่องตอบ 200

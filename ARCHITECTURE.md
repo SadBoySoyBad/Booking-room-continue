@@ -13,7 +13,7 @@
 - ผู้ใช้สร้าง Atlas ใหม่ `booking.7uebkhr.mongodb.net`; initialize database `booking` แล้ว ทั้ง Docker และ Vercel production ใช้ฐานข้อมูลใหม่นี้ มี 4 ห้องเริ่มต้น
 - GitHub มี production deployment สำเร็จของทั้งสอง project วันที่ 4 ธันวาคม 2025 การ deploy สำเร็จในอดีตไม่ได้ยืนยันว่า API ยังทำงานในวันนี้
 - Runtime Log ที่ผู้ใช้ส่งยืนยัน `querySrv ENOTFOUND _mongodb._tcp.booking.vs1tbkz.mongodb.net` แล้ว process exit 1; ตรวจ SRV ผ่าน DNS 1.1.1.1/8.8.8.8 ได้ NXDOMAIN เช่นกัน ต้องตรวจสถานะ cluster/hostname ใน Atlas
-- ผู้ใช้ยืนยัน Vercel CLI แล้ว ตั้งค่า environment และ deploy ทั้งสองโปรเจกต์จาก commit `0a5785a` บน branch `codex/restore-booking-system` สำเร็จ โดยยังไม่ได้ merge เข้า `main`
+- ผู้ใช้ยืนยัน Vercel CLI แล้ว ตั้งค่า environment และ deploy ทั้งสองโปรเจกต์สำเร็จ ล่าสุดใช้ commit `9b31775` บน branch `codex/restore-booking-system` โดยยังไม่ได้ merge เข้า `main`; Docker ในเครื่องอัปเดต source ชุดเดียวกันแล้ว
 
 หลักฐาน deployment: [Frontend](https://api.github.com/repos/SadBoySoyBad/Booking-room-continue/deployments/3421328287/statuses), [Backend](https://api.github.com/repos/SadBoySoyBad/Booking-room-continue/deployments/3421341692/statuses)
 
@@ -184,7 +184,7 @@ Frontend ส่ง ISO datetime ที่มี `+07:00` ชัดเจน Mong
 
 ผลทดสอบที่ทำในเครื่อง:
 
-1. Backend tests 24 กรณี ใช้ MongoDB จริง รวม 8 concurrent requests ที่บันทึกสำเร็จ 1 และ conflict 7 และโหมด production/Passport ด้วย provider stub; frontend proxy tests อีก 4 กรณี
+1. Backend tests 25 กรณี ใช้ MongoDB จริง รวม 8 concurrent requests ที่บันทึกสำเร็จ 1 และ conflict 7 และโหมด production/Passport ด้วย provider stub; frontend proxy tests อีก 4 กรณี
 2. Vue SFC ทุกไฟล์ parse/compile ผ่าน และ Nuxt TypeScript typecheck ผ่าน
 3. Nuxt production build และ Vercel preset ผ่าน; Docker build ทั้งสอง image ผ่าน; handler จาก Vercel build ส่งหน้าเว็บ/readiness/rooms 200 และ OAuth 302 พร้อม cookies
 4. Browser walkthrough: Guest login → booking → confirmation → history; guest เข้า admin ไม่ได้; admin โหลดทุกหน้าและอนุมัติคำขอได้
