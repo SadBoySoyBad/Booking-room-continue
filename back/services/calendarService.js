@@ -14,6 +14,16 @@ exports.createGoogleCalendarEvent = async (userId, bookingDetails) => {
         return;
     }
 
+    // Reserve the provider ID before the network request. Concurrent invocations
+    // and retries after a lost response must address the same Google event.
+    const BookingModel = require('../db').models.Booking;
+    const reserved = await BookingModel.findOneAndUpdate({ _id: bookingDetails.id,
+        user_id: userId, status: { $in: ['PENDING', 'APPROVED'] }, google_event_id: null,
+    }, { $set: { google_event_id: `b${bookingDetails.id}${require('crypto').randomBytes(6).toString('hex')}` } }, { new: true }).lean();
+    const current = reserved || await BookingModel.findById(bookingDetails.id).lean();
+    if (!current || String(current.user_id) !== String(userId) || !['PENDING', 'APPROVED'].includes(current.status) || !current.google_event_id) return;
+    bookingDetails = { ...bookingDetails, ...current };
+
     let google_access_token = user.google_access_token;
     // เช็คว่า token หมดอายุหรือไม่ (ให้เผื่อเวลา 5 นาที)
     if (user.google_token_expiry && new Date(user.google_token_expiry).getTime() < (Date.now() + 5 * 60 * 1000)) {
@@ -36,7 +46,7 @@ exports.createGoogleCalendarEvent = async (userId, bookingDetails) => {
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     const event = {
-        id: bookingDetails.google_event_id || `b${bookingDetails.id}${require('crypto').randomBytes(6).toString('hex')}`,
+        id: bookingDetails.google_event_id,
         summary: `${bookingDetails.topic || 'Meeting Room Booking'} (${bookingDetails.status || 'PENDING'})`,
         location: bookingDetails.room_name || 'Meeting Room',
         description: `Booking by: ${bookingDetails.guest_name}\nEmail: ${bookingDetails.guest_email}\nPhone: ${bookingDetails.guest_phone || 'N/A'}\nCompany: ${bookingDetails.guest_company || 'N/A'}\nRequirements: ${asArray(bookingDetails.requirements || '[]').join(', ')}\nParticipants: ${asArray(bookingDetails.participants_emails || '[]').join(', ')}`,
@@ -60,16 +70,32 @@ exports.createGoogleCalendarEvent = async (userId, bookingDetails) => {
     };
 
     try {
-        const res = await calendar.events.insert({
-            calendarId: 'primary',
-            resource: event,
-            sendUpdates: sendUpdates(user),
-        }, requestOptions);
-        console.log('Event created on Google Calendar: %s', res.data.htmlLink);
-        await require('../db').models.Booking.updateOne({ _id: bookingDetails.id }, { $set: { google_event_id: res.data.id } });
+        let res;
+        try {
+            res = await calendar.events.insert({ calendarId: 'primary', resource: event,
+                sendUpdates: sendUpdates(user) }, requestOptions);
+        } catch (error) {
+            if (errorStatus(error) !== 409) throw error;
+            res = await calendar.events.get({ calendarId: 'primary', eventId: event.id }, requestOptions);
+            if (res.data.status === 'cancelled') {
+                await BookingModel.updateOne({ _id: bookingDetails.id, google_event_id: event.id }, { $set: { google_event_id: null } });
+                return exports.createGoogleCalendarEvent(userId, bookingDetails);
+            }
+        }
+        await BookingModel.updateOne({ _id: bookingDetails.id, google_event_id: event.id }, { $set: { google_event_id: res.data.id } });
+        const latest = await BookingModel.findById(bookingDetails.id).lean();
+        if (!latest || !['PENDING', 'APPROVED'].includes(latest.status) || latest.google_event_id !== res.data.id) {
+            // A cancellation/deletion may have completed while Google was inserting.
+            try { await calendar.events.delete({ calendarId: 'primary', eventId: res.data.id,
+                sendUpdates: sendUpdates(user) }, requestOptions); }
+            catch (error) { if (![404, 410].includes(errorStatus(error))) throw error; }
+            await BookingModel.updateOne({ _id: bookingDetails.id, google_event_id: res.data.id }, { $set: { google_event_id: null } });
+            return;
+        }
+        if (latest.status !== bookingDetails.status) await exports.syncGoogleCalendarStatus(latest);
         return res.data;
     } catch (error) {
-        console.error('Error creating Google Calendar event:', errorStatus(error) || error.name);
+        console.error('Error creating Google Calendar event:', errorStatus(error) || error.code || error.name);
         throw error;
     }
 };
@@ -91,7 +117,7 @@ exports.syncGoogleCalendarStatus = async (booking) => {
     try { await calendar.events.delete({ calendarId: 'primary', eventId: booking.google_event_id,
       sendUpdates: sendUpdates(user) }, requestOptions); }
     catch (error) { if (![404, 410].includes(errorStatus(error))) throw error; }
-    await require('../db').models.Booking.updateOne({ _id: booking.id }, { $set: { google_event_id: null } });
+    await require('../db').models.Booking.updateOne({ _id: booking.id, google_event_id: booking.google_event_id }, { $set: { google_event_id: null } });
   } else {
     try {
       await calendar.events.patch({ calendarId: 'primary', eventId: booking.google_event_id,
@@ -99,8 +125,11 @@ exports.syncGoogleCalendarStatus = async (booking) => {
         requestBody: { summary: `${booking.topic} (${booking.status})` } }, requestOptions);
     } catch (error) {
       if (![404, 410].includes(errorStatus(error))) throw error;
-      // An event removed in Google Calendar must not permanently block resync.
-      await require('../db').models.Booking.updateOne({ _id: booking.id }, { $set: { google_event_id: null } });
+      // A 404 can also be an insert whose response was lost: reuse its reserved
+      // ID. Only a confirmed tombstone (410) needs a fresh provider ID.
+      if (errorStatus(error) === 410) {
+        await require('../db').models.Booking.updateOne({ _id: booking.id, google_event_id: booking.google_event_id }, { $set: { google_event_id: null } });
+      }
       if (user.settings?.auto_add_calendar !== 0) {
         return exports.createGoogleCalendarEvent(user.id, { ...booking, google_event_id: null });
       }

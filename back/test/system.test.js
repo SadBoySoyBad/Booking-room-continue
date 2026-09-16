@@ -157,10 +157,13 @@ test('calendar adapter accepts Mongo arrays and stores event ID without a real p
     sent = args; return { data: { id: 'test-calendar-event', htmlLink: 'https://example.test/event' } };
   } } }));
   await User.updateGoogleAuth(guest.id, 'google-guest-test', 'local-fake-access', 'local-fake-refresh', new Date(Date.now() + 3600000));
-  await require('../services/calendarService').createGoogleCalendarEvent(guest.id, { ...booking, room_name: room.name });
+  // The shared booking was canceled above; Calendar must never create for it.
+  const active = (await db.models.Booking.create({ ...payload(), user_id: guest.id,
+    start_time: '2099-09-01T10:00:00+07:00', end_time: '2099-09-01T11:00:00+07:00' })).toJSON();
+  await require('../services/calendarService').createGoogleCalendarEvent(guest.id, { ...active, room_name: room.name });
   assert.equal(sent.resource.attendees.length, 2);
   assert.ok(sent.resource.description.includes('Projector'));
-  const saved = await require('../models/Booking').getById(booking.id);
+  const saved = await require('../models/Booking').getById(active.id);
   assert.equal(saved.google_event_id, 'test-calendar-event');
 });
 
