@@ -14,7 +14,7 @@
 
 | การตรวจ | ผล |
 |---|---|
-| Backend integration tests กับ Mongo replica set จริง รวมโหมด production | 25 ผ่าน, 0 ไม่ผ่าน |
+| Backend integration tests กับ Mongo replica set จริง รวมโหมด production และ Calendar | 31 ผ่าน, 0 ไม่ผ่าน |
 | Frontend HTTP proxy tests | 4 ผ่าน, 0 ไม่ผ่าน |
 | Production cookie, Google/Microsoft callback, OAuth state | ผ่านด้วย provider network stub และ Mongo จริง |
 | Concurrent reservations 8 คำขอ | สำเร็จ 1, HTTP 409 จำนวน 7 |
@@ -55,11 +55,11 @@ SHA-256 ของภาพ login คู่สุดท้าย:
 
 ## ยังไม่ได้ยืนยัน
 
-- Microsoft credentials และ Microsoft OAuth round-trip ยังไม่พร้อม
-- การส่ง Calendar event ด้วย provider credentials จริง: เปิด integration แล้ว แต่ token จากการล็อกอินครั้งก่อนยังไม่มี Calendar scope ต้องให้ consent เพิ่ม
+- Microsoft credentials และ Microsoft OAuth round-trip พักไว้นอกขอบเขตตามคำสั่งเจ้าของ
+- การส่งอีเมลถึงผู้เข้าร่วมภายนอกยังไม่ได้ทดสอบ; Calendar event จริงของบัญชีเจ้าของผ่านแล้วตามหัวข้อล่าสุดด้านล่าง
 - Attendance/check-in จริง, immutable audit log และ SMTP reminders; company donut ที่เดิมเป็น placeholder เชื่อมข้อมูลจริงแล้วในรอบแก้เพิ่มเติมด้านล่าง
 
-Calendar adapter ทดสอบด้วย stub ของ Google API จึงไม่ได้ส่ง event/email ให้บุคคลอื่น การทดสอบที่ผ่านไม่ได้รับรองว่าไม่มีบัค 100% หรือไม่มีช่องโหว่ที่ยังไม่มีการรายงาน
+Calendar adapter มีทั้ง regression tests ด้วย stub และผลทดสอบ event จริงบน production โดยไม่มีผู้เข้าร่วมคนอื่น การทดสอบที่ผ่านไม่ได้รับรองว่าไม่มีบัค 100% หรือไม่มีช่องโหว่ที่ยังไม่มีการรายงาน
 
 ## Atlas ใหม่: เชื่อมและทดสอบแล้ว
 
@@ -114,9 +114,26 @@ Push commit `0a5785a99528d71417f5ef247300c0102b91eb4b` บน branch `codex/rest
 ## Google login และบัญชีเจ้าของ — อัปเดต 16 กันยายน 2026
 
 - เจ้าของบันทึก callback ของ frontend ใน Google Cloud แล้ว และยืนยันว่า Google login กลับเข้าหน้าจองสำเร็จ
-- ตรวจ Atlas แบบอ่านอย่างเดียวพบ Google identity และ refresh token ของบัญชีดังกล่าว; Google tokeninfo ยืนยัน access token ใช้งานได้ แต่ยังไม่มี scope `calendar.events`
+- ก่อน consent เพิ่ม ตรวจ Atlas พบ Google identity และ refresh token; Google tokeninfo ยืนยัน access token ใช้งานได้ แต่ยังไม่มี scope `calendar.events` (หลัง consent ตรวจผ่านแล้วในหัวข้อล่าสุด)
 - ตั้ง role บัญชีเจ้าของเป็น `admin` ตามคำยืนยัน และอ่าน role กลับจาก Atlas ได้ `admin`; middleware โหลดสิทธิ์ล่าสุดจากฐานข้อมูลทุกคำขอ
 - เปิด `GOOGLE_CALENDAR_ENABLED=true` ใน Vercel backend และ Docker; backend deployment `dpl_An9Rmk4H6xrjzJa2zTQPiCxU5NgJ` เป็น READY ใช้ application source `9b3177510a67c4c6b98da5619960da37398df6c7`
 - หลัง deploy: frontend/backend `/api/readyz` ตอบ 200; frontend `/api/auth/google` ตอบ 302 พร้อม Calendar scope และ callback `https://booking-room-continue.vercel.app/api/auth/google/callback`
-- ยังต้องให้เจ้าของ consent สิทธิ์ Calendar เพิ่ม แล้วจึงตรวจการเข้าถึงและ event จริง; ยังไม่ได้ส่ง event หรือ invitation ให้ผู้อื่น
+- ณ ขั้นตอนนี้รอเจ้าของ consent สิทธิ์ Calendar เพิ่ม; ผลหลังอนุญาตอยู่ในหัวข้อล่าสุดด้านล่าง
 - จำนวน users 0 ในรายงานรอบก่อนเป็นสถานะหลังล้าง QA ณ เวลานั้น ปัจจุบันมีบัญชีเจ้าของแล้วและไม่ได้ลบบัญชีนี้
+
+## Calendar บน production — หลัง consent และแก้ไข 16 กันยายน 2026
+
+- พัก Microsoft ตามคำสั่งเจ้าของ โดยไม่แก้หน้าตาหรือขั้นตอนการใช้งานเดิม
+- ยืนยัน token ของเจ้าของมี `calendar.events`; อ่าน Calendar API จริงได้ HTTP 200
+- แก้ permanent delete ให้ลบ Calendar event ก่อนลบ booking; ถ้า provider ล้มเหลว คืน 502 พร้อมเก็บ booking/event ID ไว้ให้ลองใหม่
+- แก้การสร้าง event ภายหลังให้มีสถานะปัจจุบัน, เวลา ISO และผู้เข้าร่วมไม่ซ้ำ; approval/cancellation ใช้ notification preference เดียวกับ create
+- รองรับ event ที่ถูกลบใน Google แล้ว (404/410): cancellation สำเร็จซ้ำได้ และ active booking สร้าง event ทดแทนได้เมื่อเปิด auto-add
+- Backend tests ทั้งหมด 31 ผ่าน / 0 ไม่ผ่าน รวม 6 regression tests ใหม่และกรณี Calendar ล่มที่ booking/approval ยังสำเร็จ
+- Push/deploy backend source `07e3d8b`: deployment `dpl_6WRPGnneZXRYHwnTV6Fnvefe95Yu` READY; frontend source คง `9b31775`
+- ทดสอบผ่าน production frontend API → backend → Atlas → Google Calendar จริง: จองสร้าง PENDING event → อนุมัติเปลี่ยนชื่อเป็น APPROVED → ยกเลิกลบ event → อนุมัติใหม่สร้าง event ใหม่ → permanent delete ลบทั้ง booking และ event
+- ตรวจเวลา Bangkok และจำกัด attendees เป็นเจ้าของบัญชีคนเดียว ไม่มีการเชิญผู้เข้าร่วมคนอื่น; ลบ booking/event QA เรียบร้อย
+- รอบ API นี้ใช้ JWT ภายในอายุ 10 นาทีของบัญชีที่เจ้าของอนุญาต ไม่ใช่การทดสอบ Google browser login ซ้ำ; browser OAuth จริงยืนยันในรอบก่อนหน้าแล้ว
+- Browser production ตรวจหน้า admin ทั้ง 7 หน้าและ analytics totals ผ่าน ไม่พบ page/console error; บัญชี admin QA ชั่วคราวถูกลบแล้ว
+- Query error logs ของ backend deployment นี้ช่วง 15 นาทีล่าสุดสำเร็จ พบ 0 รายการ; เป็นการตรวจช่วงเวลาทดสอบ ไม่ใช่หลักประกันว่าจะไม่เกิด error ในอนาคต
+- Docker backend rebuild/startup ผ่าน; backend และ frontend proxy readiness ในเครื่องตอบ 200
+- หลักฐาน (Git ignored): `back/calendar-regression-results.log`, `artifacts/calendar-production-results.json`, `artifacts/calendar-postdeploy-browser-results.json`, `artifacts/calendar-production-error-scan.json`

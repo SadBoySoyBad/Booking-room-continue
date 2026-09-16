@@ -198,9 +198,11 @@ Frontend ส่ง ISO datetime ที่มี `+07:00` ชัดเจน Mong
 - Vercel production deploy และเชื่อม Atlas ใหม่แล้ว ทั้ง backend และ frontend `/api/readyz` ตอบ 200
 - Google production callback ลงทะเบียนแล้ว เจ้าของยืนยันว่าล็อกอินและเข้าหน้าจองสำเร็จ ตรวจพบ provider identity และ token ที่ใช้งานได้ใน Atlas
 - ตั้งบัญชีเจ้าของที่ยืนยันแล้วเป็น admin ตามคำสั่งเจ้าของ และอ่าน role จากฐานข้อมูลตรวจซ้ำแล้ว; บัญชี admin ชั่วคราวสำหรับ QA ถูกลบแล้ว
-- เปิด `GOOGLE_CALENDAR_ENABLED=true` บน production และ Docker แล้ว ตรวจ Google authorization redirect มี scope `calendar.events` และ callback ของ frontend ถูกต้อง บัญชีที่ล็อกอินก่อนเปิด flag ต้องให้ consent เพิ่มก่อนทดสอบ Calendar event จริง; Microsoft ยังไม่มี credentials
+- เปิด `GOOGLE_CALENDAR_ENABLED=true` บน production และ Docker แล้ว เจ้าของให้ consent `calendar.events` เรียบร้อย ทดสอบ production API → Atlas → Google Calendar จริงผ่าน: สร้าง → อนุมัติ → ยกเลิก → อนุมัติใหม่ → ลบทั้ง booking/event โดยล้างข้อมูล QA แล้ว
+- Microsoft พักไว้นอกขอบเขตตามคำสั่งเจ้าของ; การส่ง invitation/email ถึงผู้เข้าร่วมภายนอกยังไม่ได้ทดสอบ รอบ Calendar จริงใช้เจ้าของบัญชีคนเดียว
 - Guest แบบชื่อ+เบอร์ยังไม่ใช่การพิสูจน์ความเป็นเจ้าของเบอร์ การเพิ่ม OTP/password จะเปลี่ยน UX/กระบวนการเดิม จึงยังไม่ได้เพิ่ม
 - Email/calendar settings ใช้กับ Google Calendar integration เมื่อเปิดใช้งาน ไม่มีระบบ SMTP หรือ worker ส่ง reminder แยกสำหรับ guest/Microsoft
+- Permanent delete ลบ Calendar event ก่อนลบ booking; หาก provider ล้มเหลว คืน 502 และเก็บรายการไว้ให้ retry ส่วน create/approval ยังคงบันทึก booking สำเร็จแม้ Calendar ล่ม
 - Activity page เป็นภาพรวมสถานะ booking ไม่ใช่ immutable audit trail ของทุก login/logout/แก้ไข
 - `Total Attendance` ในระบบเดิมคือจำนวน APPROVED ไม่ใช่จำนวนคนเช็กอินจริง ไม่มี attendance/check-in model
 - แผง company donut เชื่อมข้อมูลจองจริงแล้ว รวมรายการไม่ระบุบริษัท; กราฟรายเดือนแสดงจำนวนจองและจำนวนอนุมัติ โดยยังใช้ตำแหน่งและสีของหน้าเดิม
