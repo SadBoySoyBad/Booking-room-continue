@@ -203,6 +203,7 @@ Frontend ส่ง ISO datetime ที่มี `+07:00` ชัดเจน Mong
 - Guest แบบชื่อ+เบอร์ยังไม่ใช่การพิสูจน์ความเป็นเจ้าของเบอร์ การเพิ่ม OTP/password จะเปลี่ยน UX/กระบวนการเดิม จึงยังไม่ได้เพิ่ม
 - Email/calendar settings ใช้กับ Google Calendar integration เมื่อเปิดใช้งาน ไม่มีระบบ SMTP หรือ worker ส่ง reminder แยกสำหรับ guest/Microsoft
 - Permanent delete ลบ Calendar event ก่อนลบ booking; หาก provider ล้มเหลว คืน 502 และเก็บรายการไว้ให้ retry ส่วน create/approval ยังคงบันทึก booking สำเร็จแม้ Calendar ล่ม
+- Calendar จอง event ID ใน MongoDB ก่อนเรียก Google เพื่อให้คำขอพร้อมกันและ retry ใช้ ID เดียวกัน; ตรวจสถานะ booking หลัง insert และลบ event ที่มาช้าหลัง cancellation/deletion
 - Activity page เป็นภาพรวมสถานะ booking ไม่ใช่ immutable audit trail ของทุก login/logout/แก้ไข
 - `Total Attendance` ในระบบเดิมคือจำนวน APPROVED ไม่ใช่จำนวนคนเช็กอินจริง ไม่มี attendance/check-in model
 - แผง company donut เชื่อมข้อมูลจองจริงแล้ว รวมรายการไม่ระบุบริษัท; กราฟรายเดือนแสดงจำนวนจองและจำนวนอนุมัติ โดยยังใช้ตำแหน่งและสีของหน้าเดิม

@@ -14,7 +14,7 @@
 
 | การตรวจ | ผล |
 |---|---|
-| Backend integration tests กับ Mongo replica set จริง รวมโหมด production และ Calendar | 31 ผ่าน, 0 ไม่ผ่าน |
+| Backend integration tests กับ Mongo replica set จริง รวมโหมด production และ Calendar | 35 ผ่าน, 0 ไม่ผ่าน |
 | Frontend HTTP proxy tests | 4 ผ่าน, 0 ไม่ผ่าน |
 | Production cookie, Google/Microsoft callback, OAuth state | ผ่านด้วย provider network stub และ Mongo จริง |
 | Concurrent reservations 8 คำขอ | สำเร็จ 1, HTTP 409 จำนวน 7 |
@@ -137,3 +137,17 @@ Push commit `0a5785a99528d71417f5ef247300c0102b91eb4b` บน branch `codex/rest
 - Query error logs ของ backend deployment นี้ช่วง 15 นาทีล่าสุดสำเร็จ พบ 0 รายการ; เป็นการตรวจช่วงเวลาทดสอบ ไม่ใช่หลักประกันว่าจะไม่เกิด error ในอนาคต
 - Docker backend rebuild/startup ผ่าน; backend และ frontend proxy readiness ในเครื่องตอบ 200
 - หลักฐาน (Git ignored): `back/calendar-regression-results.log`, `artifacts/calendar-production-results.json`, `artifacts/calendar-postdeploy-browser-results.json`, `artifacts/calendar-production-error-scan.json`
+
+## Calendar concurrency และ retry — 16 กันยายน 2026
+
+- เพิ่ม tests แล้วพิสูจน์ว่าโค้ดเดิมไม่ผ่าน 3 กรณี: concurrent creates สร้าง event ซ้ำ, ยกเลิกระหว่างรอ insert แล้ว event ค้าง, และ retry หลัง Google สร้าง event แต่คำตอบสูญหายสร้างซ้ำ
+- แก้ให้จอง `google_event_id` ใน MongoDB แบบ atomic ก่อนเรียก Google; คำขอพร้อมกันใช้ ID เดียว และ HTTP 409 จาก Google อ่าน event ที่มีอยู่แทนสร้างใหม่
+- หลัง insert ตรวจสถานะจากฐานข้อมูลอีกครั้ง ถ้า booking ถูกยกเลิก/ลบ หรือ event ถูกแทนที่ระหว่างรอ ลบ event เก่าที่เพิ่งสร้าง; conditional updates ไม่ล้าง ID ของ event รุ่นใหม่
+- การ sync เมื่อพบ 404 ใช้ ID เดิม เพราะอาจเป็น insert ที่ยังไม่ยืนยันผล ส่วน 410/cancelled จึงเปลี่ยนเป็น ID ใหม่
+- เพิ่ม test กรณี status sync หลังผล insert ไม่แน่นอน รวม tests ใหม่ 4 กรณี; backend ทั้งหมด 35 ผ่าน / 0 ไม่ผ่าน
+- ปรับ fixture ของ test เดิมให้เป็น booking ที่ยัง active จริง แทนใช้ booking ที่ถูกยกเลิกจาก test ก่อนหน้า
+- หลักฐานก่อน/หลังแก้ (Git ignored): `artifacts/calendar-race-before.log`, `artifacts/calendar-race-after.log`, `artifacts/all-backend-regression.log`
+- Backend source `9e1e926` deploy production READY: `dpl_Y5MoqFhb2uRNbPR5JyEtdGiDm3Ke`; frontend คง source `9b31775`
+- ทดสอบ production กับ Google จริงซ้ำทั้ง create/approve/cancel/reapprove/delete ผ่าน แล้วส่ง approval พร้อมกัน 6 คำขอสำหรับ booking QA ที่ยังไม่มี event พบ Google event ที่ตรงรายการเพียง 1 รายการ
+- ตรวจลบทั้ง booking และ Calendar event QA สำเร็จ ไม่เชิญบุคคลอื่น; หลักฐาน `artifacts/calendar-concurrency-production-results.json`
+- Backend error logs ของ deployment นี้ช่วง 15 นาทีล่าสุด: 0 รายการ (`artifacts/calendar-race-production-error-scan.json`); Docker backend rebuild และ readiness backend/frontend proxy ผ่าน
