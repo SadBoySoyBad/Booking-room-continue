@@ -259,6 +259,16 @@ const bookingController = {
   delete: async (req, res) => {
     const { id } = req.params;
     try {
+      const booking = await Booking.getById(id);
+      if (!booking) return res.status(404).json({ message: 'Booking not found.' });
+      if (booking.google_event_id && process.env.GOOGLE_CALENDAR_ENABLED === 'true') {
+        try { await calendarService.syncGoogleCalendarStatus({ ...booking, status: 'CANCELED' }); }
+        catch (error) {
+          // Keep the booking/event reference so the administrator can retry.
+          console.warn('Calendar deletion failed:', error.response?.status || error.code || error.name);
+          return res.status(502).json({ message: 'Calendar cleanup failed. Booking was not deleted; please retry.' });
+        }
+      }
       const isDeleted = await Booking.delete(id);
       if (isDeleted) {
         res.status(200).json({ message: 'Booking deleted successfully.' });

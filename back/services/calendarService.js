@@ -2,6 +2,9 @@ const { google } = require('googleapis');
 const User = require('../models/User'); // เพื่อเข้าถึง User model สำหรับ refresh token
 
 const asArray = (value) => Array.isArray(value) ? value : JSON.parse(value || '[]');
+const errorStatus = (error) => Number(error.response?.status || error.code);
+const sendUpdates = (user) => user.settings?.email_meeting_booked === 1 ? 'all' : 'none';
+const requestOptions = { timeout: 10000, retry: false };
 
 exports.createGoogleCalendarEvent = async (userId, bookingDetails) => {
     const oauth2Client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_REDIRECT_URI);
@@ -34,21 +37,19 @@ exports.createGoogleCalendarEvent = async (userId, bookingDetails) => {
 
     const event = {
         id: bookingDetails.google_event_id || `b${bookingDetails.id}${require('crypto').randomBytes(6).toString('hex')}`,
-        summary: bookingDetails.topic || 'Meeting Room Booking',
+        summary: `${bookingDetails.topic || 'Meeting Room Booking'} (${bookingDetails.status || 'PENDING'})`,
         location: bookingDetails.room_name || 'Meeting Room',
         description: `Booking by: ${bookingDetails.guest_name}\nEmail: ${bookingDetails.guest_email}\nPhone: ${bookingDetails.guest_phone || 'N/A'}\nCompany: ${bookingDetails.guest_company || 'N/A'}\nRequirements: ${asArray(bookingDetails.requirements || '[]').join(', ')}\nParticipants: ${asArray(bookingDetails.participants_emails || '[]').join(', ')}`,
         start: {
-            dateTime: bookingDetails.start_time,
+            dateTime: new Date(bookingDetails.start_time).toISOString(),
             timeZone: 'Asia/Bangkok',
         },
         end: {
-            dateTime: bookingDetails.end_time,
+            dateTime: new Date(bookingDetails.end_time).toISOString(),
             timeZone: 'Asia/Bangkok',
         },
-        attendees: [
-            { email: bookingDetails.guest_email }, // ผู้จองหลัก
-            ...(asArray(bookingDetails.participants_emails || '[]').map(email => ({ email }))), // ผู้เข้าร่วมอื่นๆ
-        ],
+        attendees: [...new Set([bookingDetails.guest_email, ...asArray(bookingDetails.participants_emails)]
+            .filter(Boolean).map(email => email.trim().toLowerCase()))].map(email => ({ email })),
         reminders: {
             useDefault: false,
             overrides: [
@@ -62,23 +63,20 @@ exports.createGoogleCalendarEvent = async (userId, bookingDetails) => {
         const res = await calendar.events.insert({
             calendarId: 'primary',
             resource: event,
-            sendUpdates: user.settings?.email_meeting_booked === 1 ? 'all' : 'none',
-        });
+            sendUpdates: sendUpdates(user),
+        }, requestOptions);
         console.log('Event created on Google Calendar: %s', res.data.htmlLink);
         await require('../db').models.Booking.updateOne({ _id: bookingDetails.id }, { $set: { google_event_id: res.data.id } });
         return res.data;
     } catch (error) {
-        console.error('Error creating Google Calendar event:', error.message);
-        if (error.response && error.response.data) {
-             console.error('Google API response:', error.response.data);
-        }
+        console.error('Error creating Google Calendar event:', errorStatus(error) || error.name);
         throw error;
     }
 };
 
 // Calendar sync is best-effort; database approval remains the source of truth.
 exports.syncGoogleCalendarStatus = async (booking) => {
-  if (!booking.user_id) return;
+  if (!booking?.user_id) return;
   const user = await User.getById(booking.user_id);
   if (!user || user.settings?.update_calendar === 0) return;
   if (!booking.google_event_id) {
@@ -90,11 +88,22 @@ exports.syncGoogleCalendarStatus = async (booking) => {
     expiry_date: user.google_token_expiry ? new Date(user.google_token_expiry).getTime() : undefined });
   const calendar = google.calendar({ version: 'v3', auth });
   if (['CANCELED', 'REJECTED'].includes(booking.status)) {
-    try { await calendar.events.delete({ calendarId: 'primary', eventId: booking.google_event_id }); }
-    catch (error) { if (![404, 410].includes(error.code)) throw error; }
+    try { await calendar.events.delete({ calendarId: 'primary', eventId: booking.google_event_id,
+      sendUpdates: sendUpdates(user) }, requestOptions); }
+    catch (error) { if (![404, 410].includes(errorStatus(error))) throw error; }
     await require('../db').models.Booking.updateOne({ _id: booking.id }, { $set: { google_event_id: null } });
   } else {
-    await calendar.events.patch({ calendarId: 'primary', eventId: booking.google_event_id,
-      requestBody: { summary: `${booking.topic} (${booking.status})` } });
+    try {
+      await calendar.events.patch({ calendarId: 'primary', eventId: booking.google_event_id,
+        sendUpdates: sendUpdates(user),
+        requestBody: { summary: `${booking.topic} (${booking.status})` } }, requestOptions);
+    } catch (error) {
+      if (![404, 410].includes(errorStatus(error))) throw error;
+      // An event removed in Google Calendar must not permanently block resync.
+      await require('../db').models.Booking.updateOne({ _id: booking.id }, { $set: { google_event_id: null } });
+      if (user.settings?.auto_add_calendar !== 0) {
+        return exports.createGoogleCalendarEvent(user.id, { ...booking, google_event_id: null });
+      }
+    }
   }
 };
