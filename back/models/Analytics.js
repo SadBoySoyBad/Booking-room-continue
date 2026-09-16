@@ -28,14 +28,22 @@ const Analytics = {
   getLeaderboardReservations: async (limit = 5) => {
     const BookingModel = getBookingModel();
     const rows = await BookingModel.aggregate([
-      { $match: { guest_company: { $nin: [null, ''] } } },
-      { $group: { _id: '$guest_company', reservations: { $sum: 1 } } },
-      { $sort: { reservations: -1 } },
+      { $project: { company: { $trim: { input: { $ifNull: ['$guest_company', ''] } } } } },
+      { $match: { company: { $ne: '' } } },
+      { $group: { _id: '$company', reservations: { $sum: 1 } } },
+      { $sort: { reservations: -1, _id: 1 } },
       { $limit: limit },
       { $project: { company: '$_id', reservations: 1, totalEvents: '$reservations', district: { $literal: '—' }, total: '$reservations', _id: 0 } },
     ]);
     return rows;
   },
+
+  getCompanyReservations: async () => getBookingModel().aggregate([
+    { $project: { company: { $trim: { input: { $ifNull: ['$guest_company', ''] } } } } },
+    { $group: { _id: '$company', reservations: { $sum: 1 } } },
+    { $sort: { reservations: -1, _id: 1 } },
+    { $project: { _id: 0, company: { $cond: [{ $eq: ['$_id', ''] }, null, '$_id'] }, reservations: 1 } },
+  ]),
 
   getMonthlyBookingCounts: async (year = new Date().getFullYear()) => {
     const BookingModel = getBookingModel();
@@ -52,10 +60,11 @@ const Analytics = {
         $group: {
           _id: { $dateToString: { format: '%Y-%m', date: '$start_time', timezone: 'Asia/Bangkok' } },
           count: { $sum: 1 },
+          attendance: { $sum: { $cond: [{ $eq: ['$status', 'APPROVED'] }, 1, 0] } },
         },
       },
       { $sort: { _id: 1 } },
-      { $project: { month: '$_id', count: 1, _id: 0 } },
+      { $project: { month: '$_id', count: 1, attendance: 1, _id: 0 } },
     ]);
     return rows;
   },

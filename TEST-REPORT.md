@@ -14,7 +14,7 @@
 
 | การตรวจ | ผล |
 |---|---|
-| Backend integration tests กับ Mongo replica set จริง รวมโหมด production | 20 ผ่าน, 0 ไม่ผ่าน |
+| Backend integration tests กับ Mongo replica set จริง รวมโหมด production | 24 ผ่าน, 0 ไม่ผ่าน |
 | Frontend HTTP proxy tests | 4 ผ่าน, 0 ไม่ผ่าน |
 | Production cookie, Google/Microsoft callback, OAuth state | ผ่านด้วย provider network stub และ Mongo จริง |
 | Concurrent reservations 8 คำขอ | สำเร็จ 1, HTTP 409 จำนวน 7 |
@@ -58,7 +58,7 @@ SHA-256 ของภาพ login คู่สุดท้าย:
 - Google production callback ยังตอบ `redirect_uri_mismatch`; ต้องลงทะเบียน callback ของ frontend ใน Google Cloud
 - บัญชีผู้ดูแลถาวรรออีเมลที่เจ้าของระบุ; Microsoft credentials ยังไม่มี
 - Google/Microsoft OAuth round-trip และการส่ง Calendar event ด้วย provider credentials จริง
-- Attendance/check-in จริง, immutable audit log, SMTP reminders และกราฟ company donut ที่ใน source เดิมยังเป็น placeholder
+- Attendance/check-in จริง, immutable audit log และ SMTP reminders; company donut ที่เดิมเป็น placeholder เชื่อมข้อมูลจริงแล้วในรอบแก้เพิ่มเติมด้านล่าง
 
 Calendar adapter ทดสอบด้วย stub ของ Google API จึงไม่ได้ส่ง event/email ให้บุคคลอื่น การทดสอบที่ผ่านไม่ได้รับรองว่าไม่มีบัค 100% หรือไม่มีช่องโหว่ที่ยังไม่มีการรายงาน
 
@@ -96,4 +96,15 @@ Push commit `0a5785a99528d71417f5ef247300c0102b91eb4b` บน branch `codex/rest
 - ลบเฉพาะ 2 bookings, guest QA และ admin QA ที่สร้างทดสอบแล้ว: เหลือ users 0, bookings 0, rooms 4
 - หลักฐาน: `artifacts/production-browser-results.json`, `artifacts/production-qa-cleanup.json`, `artifacts/production-admin-*.png` (Git ignored)
 
-Google Calendar ปิดอยู่และไม่ได้ทดสอบส่ง event จริง; Google/Microsoft sign-in ยังไม่ผ่าน provider round-trip การโหลดหน้า analytics สำเร็จไม่ได้ยืนยันว่าฟีเจอร์ placeholder เดิมมีข้อมูลจริงครบแล้ว
+Google Calendar ปิดอยู่และไม่ได้ทดสอบส่ง event จริง; Google/Microsoft sign-in ยังไม่ผ่าน provider round-trip
+
+## รอบแก้เพิ่มเติม: analytics และ OAuth
+
+- กราฟบริษัทอ่านยอดจองจริงทั้งหมด รวมบริษัทที่ไม่ได้ระบุชื่อ; leaderboard ตัดช่องว่างหัวท้ายเหมือนกราฟ เพื่อให้นับตรงกัน
+- แก้ไฟล์กราฟที่มีนามสกุล `.vue.vue` และความสูงแท่งกราฟที่ยุบเป็นศูนย์; แสดงยอดอนุมัติด้วยสีจาก legend เดิม
+- ทดสอบ browser กับข้อมูลใน MongoDB ทดสอบแยก: 8 รายการจอง, 4 อนุมัติ, Acme 25%, บริษัทไม่ระบุชื่อ 12.5%; ความสูงแท่งกราฟตรวจได้ 144/72 px
+- ทดสอบฐานข้อมูลว่าง: แสดงข้อความไม่มีข้อมูล ไม่มี page/console error; หลักฐาน `artifacts/analytics-browser-results.json` และภาพ `analytics-populated.png` / `analytics-empty.png`
+- API ทดสอบ timezone ที่ขอบปี Bangkok และการแยกสถานะ APPROVED/PENDING/CANCELED ผ่าน
+- ปิดการผูกบัญชี Microsoft จากอีเมลอย่างเดียวและการผูกข้าม provider อัตโนมัติ; ทดสอบอีเมลตรงกันแต่ provider subject ต่างกันแล้วไม่ได้รับ session หรือสิทธิ์ admin
+- Backend ทั้งชุด 24 ผ่าน; รันทดสอบ system ซ้ำหลังแก้การรวมชื่อบริษัท 15 ผ่าน
+- ตรวจ provider จริงซ้ำ: Google ยัง `redirect_uri_mismatch`, Microsoft ยัง 503 เพราะไม่มี credentials

@@ -80,6 +80,8 @@ Do not put JWT_SECRET or OAuth client secrets into NUXT_PUBLIC_* variables. The 
 
 Register the frontend-origin callback URLs shown above in Google Cloud / Microsoft Entra. OAuth starts and returns through the same frontend `/api` proxy so the state cookie is available on callback. The proxy must preserve redirects (`redirect: 'manual'`) and all Set-Cookie headers.
 
+Microsoft accounts are identified by their provider subject ID. They do not automatically claim existing accounts by matching email, and cross-provider accounts are not automatically merged. For a Microsoft administrator, sign in to create the provider account first, then grant that exact account its role using an existing administrator. A pre-provisioned email-only account can be claimed using verified Google sign-in.
+
 For local development, register `http://localhost:3000/api/auth/google/callback` in the Google OAuth client's Authorized redirect URIs, and `http://localhost:3000/api/auth/microsoft/callback` as the appropriate web redirect URI in Entra. The current Google client returned `redirect_uri_mismatch` for the localhost URL during verification; Microsoft credentials are currently absent from the local environment. Do not change the layout or add a fake sign-in to work around provider configuration.
 
 To enable Google Calendar, enable the Google Calendar API, set GOOGLE_CALENDAR_ENABLED=true, and sign in again to grant the calendar.events scope. Calendar integration is optional; booking succeeds independently if the provider is unavailable. Email reminders use Google Calendar, not an SMTP worker.

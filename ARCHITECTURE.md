@@ -184,7 +184,7 @@ Frontend ส่ง ISO datetime ที่มี `+07:00` ชัดเจน Mong
 
 ผลทดสอบที่ทำในเครื่อง:
 
-1. Backend tests 20 กรณี ใช้ MongoDB จริง รวม 8 concurrent requests ที่บันทึกสำเร็จ 1 และ conflict 7 และโหมด production/Passport ด้วย provider stub; frontend proxy tests อีก 4 กรณี
+1. Backend tests 24 กรณี ใช้ MongoDB จริง รวม 8 concurrent requests ที่บันทึกสำเร็จ 1 และ conflict 7 และโหมด production/Passport ด้วย provider stub; frontend proxy tests อีก 4 กรณี
 2. Vue SFC ทุกไฟล์ parse/compile ผ่าน และ Nuxt TypeScript typecheck ผ่าน
 3. Nuxt production build และ Vercel preset ผ่าน; Docker build ทั้งสอง image ผ่าน; handler จาก Vercel build ส่งหน้าเว็บ/readiness/rooms 200 และ OAuth 302 พร้อม cookies
 4. Browser walkthrough: Guest login → booking → confirmation → history; guest เข้า admin ไม่ได้; admin โหลดทุกหน้าและอนุมัติคำขอได้
@@ -203,8 +203,11 @@ Frontend ส่ง ISO datetime ที่มี `+07:00` ชัดเจน Mong
 - Email/calendar settings ใช้กับ Google Calendar integration เมื่อเปิดใช้งาน ไม่มีระบบ SMTP หรือ worker ส่ง reminder แยกสำหรับ guest/Microsoft
 - Activity page เป็นภาพรวมสถานะ booking ไม่ใช่ immutable audit trail ของทุก login/logout/แก้ไข
 - `Total Attendance` ในระบบเดิมคือจำนวน APPROVED ไม่ใช่จำนวนคนเช็กอินจริง ไม่มี attendance/check-in model
-- ช่อง district ไม่มี field ต้นทาง และแผง company donut บน analytics เดิมยังเป็น placeholder การสร้างข้อมูล district/check-in หรือออกแบบกราฟใหม่ต้องมีข้อกำหนดเพิ่ม ไม่ควรสร้างตัวเลขแทนข้อมูลจริง
+- แผง company donut เชื่อมข้อมูลจองจริงแล้ว รวมรายการไม่ระบุบริษัท; กราฟรายเดือนแสดงจำนวนจองและจำนวนอนุมัติ โดยยังใช้ตำแหน่งและสีของหน้าเดิม
+- ช่อง district ไม่มี field ต้นทาง การสร้างข้อมูล district/check-in ต้องมีข้อกำหนดเพิ่ม ไม่ควรสร้างตัวเลขแทนข้อมูลจริง
 - ไม่ได้รับรองว่าไม่มีบัค 100%: ผลข้างต้นเป็นสิ่งที่ตรวจยืนยันได้ พร้อมขอบเขตที่ยังต้องทดสอบบริการจริง
+
+OAuth ใช้ provider subject ID เป็นตัวระบุบัญชี Microsoft ไม่ผูกบัญชีจากอีเมลอย่างเดียว และไม่ผูกบัญชีข้าม provider อัตโนมัติ เพราะอีเมล Microsoft เป็นข้อมูลติดต่อที่เปลี่ยนได้ ผู้ดูแลที่ใช้ Microsoft ต้อง login เพื่อสร้างบัญชี provider ก่อน แล้วให้ผู้ดูแลเดิมเปลี่ยน role ของบัญชีนั้น ส่วนบัญชีที่เตรียมด้วยอีเมลและยังไม่ผูก provider ใช้ Google ที่ยืนยันอีเมลแล้วได้
 
 ## เอกสารอ้างอิงทางเทคนิค
 

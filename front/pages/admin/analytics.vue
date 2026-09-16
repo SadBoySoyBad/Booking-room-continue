@@ -1,6 +1,7 @@
 <template>
   <div>
     <div class="p-2 sm:p-4 lg:p-6 w-full h-full">
+      <p v-if="errorAnalytics" role="alert" class="text-red-600 text-sm mb-4">{{ errorAnalytics }}</p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div class="bg-white p-4 rounded-lg shadow-md flex flex-col items-center justify-center">
           <h3 class="text-lg font-bold mb-2">Total Reservation</h3>
@@ -41,7 +42,7 @@
             </div>
           </div>
           <div v-if="loadingAnalytics" class="text-center text-gray-500 mt-2">Loading graph...</div>
-          <MonthlyAttendanceGraph v-else :data="analyticsData.monthlyBookings" />
+          <MonthlyAttendanceGraph v-else :data="analyticsData.monthlyBookings" :show-attendance="true" />
         </div>
 
         <div class="col-span-1 lg:col-span-1 grid grid-cols-1 gap-4">
@@ -56,9 +57,7 @@
             <h3 class="text-lg font-bold mb-2 text-center">Donut Graph ของบริษัทต่างๆ ที่มาใช้บริการ</h3>
             <p class="text-sm text-gray-600 text-center">Lists / Percentage ของบริษัท</p>
             <div v-if="loadingAnalytics" class="text-center text-gray-500 flex-grow flex items-center justify-center">Loading...</div>
-            <div v-else class="flex-grow flex items-center justify-center border border-dashed border-gray-300 rounded-lg mt-2 p-4">
-                <p class="text-gray-500 text-sm">กราฟและรายการจะแสดงที่นี่ (ยังไม่มีข้อมูลหรือ component)</p>
-            </div>
+            <CompanyReservationsChart v-else :companies="analyticsData.companies" />
           </div>
         </div>
       </div>
@@ -88,6 +87,7 @@ useHead({
 // Import existing components that can be reused
 import MonthlyAttendanceGraph from '../../components/dashboard/MonthlyAttendanceGraph.vue';
 import TotalEventsChart from '../../components/dashboard/TotalEventsChart.vue';
+import CompanyReservationsChart from '../../components/dashboard/CompanyReservationsChart.vue';
 
 const analyticsData = ref({
   totalReservations: '000',
@@ -96,6 +96,7 @@ const analyticsData = ref({
   // เพิ่ม monthlyBookings และ eventsByRole ที่นี่
   monthlyBookings: [],
   eventsByRole: { guest: 0, employee: 0, admin: 0 },
+  companies: [],
 });
 
 const loadingAnalytics = ref(true);
@@ -111,6 +112,7 @@ const fetchAnalyticsData = async () => {
       analyticsData.value.totalReservations = response.totalReservations || 0; // ควรเป็น Number
       analyticsData.value.totalAttendance = response.totalAttendance || 0; // ควรเป็น Number
       analyticsData.value.leaderboard = response.leaderboard || [];
+      analyticsData.value.companies = response.companies || [];
       // ตั้งค่าข้อมูลสำหรับกราฟด้วยถ้า Backend ส่งมา
       analyticsData.value.monthlyBookings = response.monthlyBookings || []; // อัปเดต monthlyBookings
       analyticsData.value.eventsByRole = response.eventsByRole || { guest: 0, employee: 0, admin: 0 }; // อัปเดต eventsByRole

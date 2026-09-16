@@ -9,6 +9,7 @@ const analyticsController = {
             const leaderboard = await Analytics.getLeaderboardReservations();
             const monthlyBookings = await Analytics.getMonthlyBookingCounts();
             const eventsByRole = await Analytics.getEventsByRole();
+            const companies = await Analytics.getCompanyReservations();
 
             res.status(200).json({
                 totalReservations: totalReservations.count || 0,
@@ -16,6 +17,7 @@ const analyticsController = {
                 leaderboard: leaderboard,
                 monthlyBookings: monthlyBookings,
                 eventsByRole: eventsByRole,
+                companies,
             });
         } catch (error) {
             console.error("Error in getSummaryAnalytics:", error);

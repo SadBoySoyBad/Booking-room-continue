@@ -64,6 +64,7 @@ test('production guest cookie is secure, usable without bearer, and cleared at l
 for (const provider of ['google', 'microsoft']) {
   test(`${provider} production OAuth preserves state, existing admin role and HttpOnly session`, async (t) => {
     const existing = await User.create(`${provider} Admin`, `${provider}-admin@example.test`, null, 'admin');
+    if (provider === 'microsoft') await User.updateMicrosoftAuth(existing.id, 'microsoft-test-subject', null, null, null);
     const strategy = passport._strategy(provider);
     t.mock.method(strategy._oauth2, 'getOAuthAccessToken', (code, params, done) => {
       assert.equal(code, 'local-provider-code');
@@ -116,4 +117,60 @@ test('Google refuses an unverified email instead of linking it to an admin accou
   assert.equal(callback.headers.location, 'https://booking.example.test/login?error=auth_failed');
   assert.ok(!callback.headers['set-cookie'].some(value => value.startsWith('auth_token=')));
   assert.equal(await User.findByGoogleId('unverified-subject'), null);
+});
+
+for (const provider of ['google', 'microsoft']) {
+  test(`${provider} cannot take over an existing provider account using the same email`, async (t) => {
+    const strategy = passport._strategy(provider);
+    const existing = await User.findByEmail('microsoft-admin@example.test');
+    t.mock.method(strategy._oauth2, 'getOAuthAccessToken', (code, params, done) => done(null, 'fake', null, {}));
+    t.mock.method(strategy, 'userProfile', (token, done) => done(null, {
+      id: `unrelated-${provider}-subject`, emails: [{ value: existing.email }], _json: { email_verified: true },
+    }));
+    const start = await secure(request(app).get(`/api/auth/${provider}`)).expect(302);
+    const state = new URL(start.headers.location).searchParams.get('state');
+    const callback = await secure(request(app).get(`/api/auth/${provider}/callback`)).query({ state, code: 'test' })
+      .set('Cookie', cookieHeader(start)).expect(302);
+    assert.equal(callback.headers.location, 'https://booking.example.test/login?error=auth_failed');
+    assert.ok(!callback.headers['set-cookie'].some(value => value.startsWith('auth_token=')));
+    const saved = await User.getById(existing.id);
+    assert.equal(saved.microsoft_id, 'microsoft-test-subject');
+    assert.equal(saved.google_id, undefined);
+    assert.equal(saved.role, 'admin');
+  });
+}
+
+test('Microsoft cannot claim a pre-provisioned admin by email alone', async (t) => {
+  const admin = await User.create('Unlinked admin', 'unlinked-admin@example.test', null, 'admin');
+  const strategy = passport._strategy('microsoft');
+  t.mock.method(strategy._oauth2, 'getOAuthAccessToken', (code, params, done) => done(null, 'fake', null, {}));
+  t.mock.method(strategy, 'userProfile', (token, done) => done(null, {
+    id: 'unlinked-microsoft-subject', emails: [{ value: admin.email }],
+  }));
+  const start = await secure(request(app).get('/api/auth/microsoft')).expect(302);
+  const state = new URL(start.headers.location).searchParams.get('state');
+  const callback = await secure(request(app).get('/api/auth/microsoft/callback')).query({ state, code: 'test' })
+    .set('Cookie', cookieHeader(start)).expect(302);
+  assert.equal(callback.headers.location, 'https://booking.example.test/login?error=auth_failed');
+  assert.equal((await User.getById(admin.id)).microsoft_id, undefined);
+});
+
+test('new Microsoft sign-in creates an employee and repeated sign-in keeps its identity', async (t) => {
+  const strategy = passport._strategy('microsoft');
+  t.mock.method(strategy._oauth2, 'getOAuthAccessToken', (code, params, done) => done(null, 'fake', null, {}));
+  t.mock.method(strategy, 'userProfile', (token, done) => done(null, {
+    id: 'new-microsoft-employee', displayName: 'New employee', emails: [{ value: 'new-employee@example.test' }],
+  }));
+  let userId;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const start = await secure(request(app).get('/api/auth/microsoft')).expect(302);
+    const state = new URL(start.headers.location).searchParams.get('state');
+    const callback = await secure(request(app).get('/api/auth/microsoft/callback')).query({ state, code: 'test' })
+      .set('Cookie', cookieHeader(start)).expect(302);
+    assert.equal(callback.headers.location, 'https://booking.example.test/booking');
+    const me = await secure(request(app).get('/api/auth/myinfo')).set('Cookie', cookieHeader(callback)).expect(200);
+    assert.equal(me.body.user.role, 'employee');
+    if (userId) assert.equal(me.body.user.id, userId);
+    userId = me.body.user.id;
+  }
 });

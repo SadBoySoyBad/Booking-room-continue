@@ -163,3 +163,26 @@ test('calendar adapter accepts Mongo arrays and stores event ID without a real p
   const saved = await require('../models/Booking').getById(booking.id);
   assert.equal(saved.google_event_id, 'test-calendar-event');
 });
+
+test('analytics uses real company totals and Bangkok monthly approved counts', async () => {
+  const BookingModel = db.models.Booking;
+  const rows = await BookingModel.create([
+    { ...payload(), user_id: guest.id, guest_company: ' Analytics QA ', status: 'APPROVED',
+      start_time: '2100-01-01T00:00:00+07:00', end_time: '2100-01-01T01:00:00+07:00' },
+    { ...payload(), user_id: guest.id, guest_company: 'Analytics QA', status: 'PENDING',
+      start_time: '2100-01-02T10:00:00+07:00', end_time: '2100-01-02T11:00:00+07:00' },
+    { ...payload(), user_id: guest.id, guest_company: null, status: 'CANCELED',
+      start_time: '2100-01-03T10:00:00+07:00', end_time: '2100-01-03T11:00:00+07:00' },
+  ]);
+  try {
+    const summary = (await request(app).get('/api/analytics/summary').set('Authorization', bearer(admin)).expect(200)).body;
+    assert.equal(summary.companies.find(row => row.company === 'Analytics QA').reservations, 2);
+    assert.equal(summary.leaderboard.find(row => row.company === 'Analytics QA').reservations, 2);
+    assert.ok(summary.companies.some(row => row.company === null && row.reservations > 0));
+    assert.equal(summary.companies.reduce((sum, row) => sum + row.reservations, 0), summary.totalReservations);
+    const months = await require('../models/Analytics').getMonthlyBookingCounts(2100);
+    assert.deepEqual(months, [{ month: '2100-01', count: 2, attendance: 1 }]);
+  } finally {
+    await BookingModel.deleteMany({ _id: { $in: rows.map(row => row._id) } });
+  }
+});
