@@ -7,7 +7,7 @@ Verified projects in Potter's projects (`potters-projects-d4f2f738`):
 - Both connect to `SadBoySoyBad/Booking-room-continue`.
 - `booking-room-v1` and `booking-room-v1-tz3u` belong to the older repository.
 
-Both production projects now run commit `0a5785a` from `codex/restore-booking-system` (verified 16 September 2026, Asia/Bangkok). Public readiness, guest booking, browser admin approval, settings persistence and concurrent booking checks passed. The branch has not been merged into `main`; future deployments must use the repaired source. See TEST-REPORT.md for evidence and remaining OAuth configuration.
+Both production projects now run application commit `9b31775` from `codex/restore-booking-system` (verified 16 September 2026, Asia/Bangkok). Public readiness, guest booking, browser admin approval, settings persistence and concurrent booking checks passed. The owner completed real Google sign-in and their confirmed account now has the admin role. Calendar integration is enabled; an additional Google consent is still required for the existing account's Calendar scope before live event verification. Microsoft credentials remain unconfigured. The branch has not been merged into `main`; future deployments must use the repaired source. See TEST-REPORT.md for evidence and remaining OAuth configuration.
 
 Previously, the backend returned FUNCTION_INVOCATION_FAILED. Owner-supplied logs identified `querySrv ENOTFOUND _mongodb._tcp.booking.vs1tbkz.mongodb.net`, followed by process exit 1. Independent SRV checks returned NXDOMAIN.
 

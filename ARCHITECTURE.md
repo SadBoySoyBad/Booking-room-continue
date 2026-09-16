@@ -196,9 +196,9 @@ Frontend ส่ง ISO datetime ที่มี `+07:00` ชัดเจน Mong
 ## 7. ขอบเขตที่ยังยืนยันไม่ได้ / ส่วนที่ต้องตัดสินใจ
 
 - Vercel production deploy และเชื่อม Atlas ใหม่แล้ว ทั้ง backend และ frontend `/api/readyz` ตอบ 200
-- Google จริงยังตอบ `redirect_uri_mismatch` สำหรับ callback ของ frontend production ต้องลงทะเบียน `https://booking-room-continue.vercel.app/api/auth/google/callback` ใน Google Cloud client; Microsoft ยังไม่มี credentials
-- ยังไม่มีบัญชีผู้ดูแลถาวรในฐานข้อมูลใหม่ ต้องระบุอีเมลของเจ้าของและตั้ง role ด้วย `admin:create`; บัญชี admin ชั่วคราวสำหรับ QA ถูกลบแล้ว
-- Google/Microsoft OAuth และ Google Calendar ต้องมี client credentials, callback URLs และ consent/scopes จริง จึงยังไม่ได้ยืนยัน provider round-trip ของ production
+- Google production callback ลงทะเบียนแล้ว เจ้าของยืนยันว่าล็อกอินและเข้าหน้าจองสำเร็จ ตรวจพบ provider identity และ token ที่ใช้งานได้ใน Atlas
+- ตั้งบัญชีเจ้าของที่ยืนยันแล้วเป็น admin ตามคำสั่งเจ้าของ และอ่าน role จากฐานข้อมูลตรวจซ้ำแล้ว; บัญชี admin ชั่วคราวสำหรับ QA ถูกลบแล้ว
+- เปิด `GOOGLE_CALENDAR_ENABLED=true` บน production และ Docker แล้ว ตรวจ Google authorization redirect มี scope `calendar.events` และ callback ของ frontend ถูกต้อง บัญชีที่ล็อกอินก่อนเปิด flag ต้องให้ consent เพิ่มก่อนทดสอบ Calendar event จริง; Microsoft ยังไม่มี credentials
 - Guest แบบชื่อ+เบอร์ยังไม่ใช่การพิสูจน์ความเป็นเจ้าของเบอร์ การเพิ่ม OTP/password จะเปลี่ยน UX/กระบวนการเดิม จึงยังไม่ได้เพิ่ม
 - Email/calendar settings ใช้กับ Google Calendar integration เมื่อเปิดใช้งาน ไม่มีระบบ SMTP หรือ worker ส่ง reminder แยกสำหรับ guest/Microsoft
 - Activity page เป็นภาพรวมสถานะ booking ไม่ใช่ immutable audit trail ของทุก login/logout/แก้ไข

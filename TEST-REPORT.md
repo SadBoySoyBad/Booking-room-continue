@@ -55,9 +55,8 @@ SHA-256 ของภาพ login คู่สุดท้าย:
 
 ## ยังไม่ได้ยืนยัน
 
-- Google production callback ยังตอบ `redirect_uri_mismatch`; ต้องลงทะเบียน callback ของ frontend ใน Google Cloud
-- บัญชีผู้ดูแลถาวรรออีเมลที่เจ้าของระบุ; Microsoft credentials ยังไม่มี
-- Google/Microsoft OAuth round-trip และการส่ง Calendar event ด้วย provider credentials จริง
+- Microsoft credentials และ Microsoft OAuth round-trip ยังไม่พร้อม
+- การส่ง Calendar event ด้วย provider credentials จริง: เปิด integration แล้ว แต่ token จากการล็อกอินครั้งก่อนยังไม่มี Calendar scope ต้องให้ consent เพิ่ม
 - Attendance/check-in จริง, immutable audit log และ SMTP reminders; company donut ที่เดิมเป็น placeholder เชื่อมข้อมูลจริงแล้วในรอบแก้เพิ่มเติมด้านล่าง
 
 Calendar adapter ทดสอบด้วย stub ของ Google API จึงไม่ได้ส่ง event/email ให้บุคคลอื่น การทดสอบที่ผ่านไม่ได้รับรองว่าไม่มีบัค 100% หรือไม่มีช่องโหว่ที่ยังไม่มีการรายงาน
@@ -96,7 +95,7 @@ Push commit `0a5785a99528d71417f5ef247300c0102b91eb4b` บน branch `codex/rest
 - ลบเฉพาะ 2 bookings, guest QA และ admin QA ที่สร้างทดสอบแล้ว: เหลือ users 0, bookings 0, rooms 4
 - หลักฐาน: `artifacts/production-browser-results.json`, `artifacts/production-qa-cleanup.json`, `artifacts/production-admin-*.png` (Git ignored)
 
-Google Calendar ปิดอยู่และไม่ได้ทดสอบส่ง event จริง; Google/Microsoft sign-in ยังไม่ผ่าน provider round-trip
+ณ รอบทดสอบนี้ Google Calendar ยังปิดอยู่ และ Google/Microsoft sign-in ยังไม่ผ่าน provider round-trip; สถานะ Google ล่าสุดอยู่ในหัวข้อด้านล่าง
 
 ## รอบแก้เพิ่มเติม: analytics และ OAuth
 
@@ -107,7 +106,17 @@ Google Calendar ปิดอยู่และไม่ได้ทดสอบ�
 - API ทดสอบ timezone ที่ขอบปี Bangkok และการแยกสถานะ APPROVED/PENDING/CANCELED ผ่าน
 - ปิดการผูกบัญชี Microsoft จากอีเมลอย่างเดียวและการผูกข้าม provider อัตโนมัติ; ทดสอบอีเมลตรงกันแต่ provider subject ต่างกันแล้วไม่ได้รับ session หรือสิทธิ์ admin
 - Backend รอบล่าสุด: system 15 ผ่าน และ production/OAuth 10 ผ่าน รวม 25 กรณี; production build และ browser verification ผ่าน
-- ตรวจ provider จริงซ้ำ: Google ยัง `redirect_uri_mismatch`, Microsoft ยัง 503 เพราะไม่มี credentials
+- ณ รอบทดสอบนี้ Google ยัง `redirect_uri_mismatch`, Microsoft ยัง 503 เพราะไม่มี credentials; สถานะ Google ล่าสุดอยู่ในหัวข้อด้านล่าง
 - Deploy source `9b3177510a67c4c6b98da5619960da37398df6c7` ขึ้น production แล้ว: backend `dpl_HTBetGz8Hc38poisbAFTkyMitCKP`, frontend `dpl_EC3aZGSKjz9mYcdJQia6o1WuAR5Y` — READY
 - ทดสอบหน้า Analytics/Dashboard และผลรวมบริษัทผ่าน API production ผ่าน ไม่พบ page/console error; หลักฐาน `artifacts/production-followup-results.json`
 - Docker frontend/backend build และ startup ผ่าน; readiness ทั้งสองฝั่งในเครื่องตอบ 200
+
+## Google login และบัญชีเจ้าของ — อัปเดต 16 กันยายน 2026
+
+- เจ้าของบันทึก callback ของ frontend ใน Google Cloud แล้ว และยืนยันว่า Google login กลับเข้าหน้าจองสำเร็จ
+- ตรวจ Atlas แบบอ่านอย่างเดียวพบ Google identity และ refresh token ของบัญชีดังกล่าว; Google tokeninfo ยืนยัน access token ใช้งานได้ แต่ยังไม่มี scope `calendar.events`
+- ตั้ง role บัญชีเจ้าของเป็น `admin` ตามคำยืนยัน และอ่าน role กลับจาก Atlas ได้ `admin`; middleware โหลดสิทธิ์ล่าสุดจากฐานข้อมูลทุกคำขอ
+- เปิด `GOOGLE_CALENDAR_ENABLED=true` ใน Vercel backend และ Docker; backend deployment `dpl_An9Rmk4H6xrjzJa2zTQPiCxU5NgJ` เป็น READY ใช้ application source `9b3177510a67c4c6b98da5619960da37398df6c7`
+- หลัง deploy: frontend/backend `/api/readyz` ตอบ 200; frontend `/api/auth/google` ตอบ 302 พร้อม Calendar scope และ callback `https://booking-room-continue.vercel.app/api/auth/google/callback`
+- ยังต้องให้เจ้าของ consent สิทธิ์ Calendar เพิ่ม แล้วจึงตรวจการเข้าถึงและ event จริง; ยังไม่ได้ส่ง event หรือ invitation ให้ผู้อื่น
+- จำนวน users 0 ในรายงานรอบก่อนเป็นสถานะหลังล้าง QA ณ เวลานั้น ปัจจุบันมีบัญชีเจ้าของแล้วและไม่ได้ลบบัญชีนี้
